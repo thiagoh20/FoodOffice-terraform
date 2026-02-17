@@ -1,0 +1,120 @@
+# ============================================
+# Sistema Operativo
+# ============================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ============================================
+# Editores e IDEs
+# ============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ============================================
+# Node.js / JavaScript / TypeScript
+# ============================================
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+.nuxt/
+.cache/
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ============================================
+# Terraform
+# ============================================
+# State files
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Variables files (except examples)
+*.tfvars
+!*.tfvars.example
+
+# Terraform directories
+.terraform/
+.terraform.lock.hcl
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Plan files
+*.tfplan
+*.tfplan.json
+
+# Terraform configuration
+.terraformrc
+terraform.rc
+
+# ============================================
+# Variables de Entorno y Secretos
+# ============================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+
+# ============================================
+# Archivos Sensibles y Certificados
+# ============================================
+secrets/
+*.pem
+*.key
+*.cert
+*.crt
+*.p12
+*.pfx
+*.jks
+id_rsa*
+*.ppk
+
+# ============================================
+# Archivos Temporales
+# ============================================
+*.tmp
+*.temp
+*.bak
+*.backup

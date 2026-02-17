@@ -1,0 +1,10 @@
+# Copia este archivo a terraform.tfvars y completa los valores
+# cp terraform.tfvars.example terraform.tfvars
+
+environment = "staging"
+project_name = "foodoffice"
+region = "us-east-1"
+
+# Variables específicas del ambiente staging
+# database_instance_class = "db.t3.small"
+# instance_count = 2

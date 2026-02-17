@@ -1,0 +1,10 @@
+# Copia este archivo a terraform.tfvars y completa los valores
+# cp terraform.tfvars.example terraform.tfvars
+
+environment = "dev"
+project_name = "foodoffice"
+region = "us-east-1"
+
+# Variables específicas del ambiente dev
+# database_instance_class = "db.t3.micro"
+# instance_count = 1
