@@ -1,0 +1,125 @@
+name: Deploy Frontend
+
+on:
+  workflow_call:
+    inputs:
+      build-command:
+        description: 'Comando de build a ejecutar'
+        required: false
+        type: string
+        default: 'pnpm build'
+      dist-folder:
+        description: 'Ruta de la carpeta de distribución'
+        required: false
+        type: string
+        default: 'dist'
+      environment:
+        description: 'Ambiente a desplegar'
+        required: true
+        type: string
+      s3-bucket-name:
+        description: 'Nombre del bucket S3'
+        required: true
+        type: string
+      aws-region:
+        description: 'Región de AWS'
+        required: false
+        type: string
+        default: 'us-east-2'
+      project-name:
+        description: 'Nombre del proyecto'
+        required: true
+        type: string
+        default: 'frontend'
+    secrets:
+      CLOUDFRONT_ID:
+        description: 'ID de distribución de CloudFront'
+        required: true
+      AWS_ROLE_ARN:
+        description: 'ARN del rol IAM de AWS para OIDC'
+        required: true
+
+# Permisos necesarios para OIDC
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  NODE_VERSION: '20.x'
+  PNPM_VERSION: '10.4.1'
+
+jobs:
+  deploy:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    env:
+      SOCKET_URL: ${{ secrets.SOCKET_URL }}
+    
+    steps:
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+      
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Frontend
+        run: ${{ inputs.build-command }}
+
+      - name: Configurar credenciales de AWS usando OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: GitHubActions-${{ github.run_id }}
+          aws-region: ${{ inputs.aws-region }}
+
+      - name: Sincronizar archivos a S3
+        run: |
+          aws s3 sync ${{ inputs.dist-folder }} s3://${{ inputs.s3-bucket-name }} \
+            --delete \
+            --cache-control "public, max-age=31536000" \
+            --exclude "*.html" \
+            --exclude "*.json"
+          
+          # Configurar cache más corto para archivos HTML y JSON
+          aws s3 sync ${{ inputs.dist-folder }} s3://${{ inputs.s3-bucket-name }} \
+            --cache-control "public, max-age=0, must-revalidate" \
+            --include "*.html" \
+            --include "*.json"
+
+      - name: Crear invalidación de CloudFront
+        run: |
+          INVALIDATION_ID=$(aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_ID }} \
+            --paths "/*" \
+            --query 'Invalidation.Id' \
+            --output text)
+          
+          echo "Invalidación de CloudFront creada con ID: $INVALIDATION_ID"
+          
+          # Opcional: Esperar a que la invalidación se complete
+          echo "Esperando a que la invalidación se complete..."
+          aws cloudfront wait invalidation-completed \
+            --distribution-id ${{ secrets.CLOUDFRONT_ID }} \
+            --id $INVALIDATION_ID
+          
+          echo "¡Invalidación de CloudFront completada exitosamente!"
+
+      - name: Resumen del despliegue
+        run: |
+          echo "## 🚀 Resumen del Despliegue" >> $GITHUB_STEP_SUMMARY
+          echo "| Propiedad | Valor |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Ambiente | ${{ inputs.environment }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Bucket S3 | ${{ inputs.s3-bucket-name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| CloudFront ID | ${{ secrets.CLOUDFRONT_ID }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Despliegue completado exitosamente!" >> $GITHUB_STEP_SUMMARY
