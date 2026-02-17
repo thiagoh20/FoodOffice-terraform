@@ -1,12 +1,13 @@
 # terraform/modules/s3/main.tf
-resource "aws_s3_bucket" "frontend" {
+# Usamos data source para el bucket existente
+# Si el bucket no existe, debe crearse manualmente o cambiar esto a resource
+data "aws_s3_bucket" "frontend" {
   bucket = var.bucket_name
-
-  tags = var.tags
 }
 
+# Recursos de configuración del bucket (se aplican al bucket existente)
 resource "aws_s3_bucket_versioning" "frontend" {
-  bucket = aws_s3_bucket.frontend.id
+  bucket = data.aws_s3_bucket.frontend.id
 
   versioning_configuration {
     status = "Enabled"
@@ -14,7 +15,7 @@ resource "aws_s3_bucket_versioning" "frontend" {
 }
 
 resource "aws_s3_bucket_public_access_block" "frontend" {
-  bucket = aws_s3_bucket.frontend.id
+  bucket = data.aws_s3_bucket.frontend.id
 
   block_public_acls       = true
   block_public_policy     = true
@@ -23,7 +24,7 @@ resource "aws_s3_bucket_public_access_block" "frontend" {
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "frontend" {
-  bucket = aws_s3_bucket.frontend.id
+  bucket = data.aws_s3_bucket.frontend.id
 
   rule {
     apply_server_side_encryption_by_default {

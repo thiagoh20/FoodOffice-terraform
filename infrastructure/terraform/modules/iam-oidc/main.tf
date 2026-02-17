@@ -1,21 +1,13 @@
 # terraform/modules/iam-oidc/main.tf
 # OIDC Provider para GitHub
-# NOTA: Si el OIDC provider ya existe en tu cuenta de AWS, 
-# necesitarás importarlo primero: terraform import module.iam_oidc.aws_iam_openid_connect_provider.github arn:aws:iam::ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com
+# Usamos data source porque el OIDC provider ya existe en la cuenta de AWS
+# (es un recurso compartido que puede ser usado por múltiples proyectos)
 data "tls_certificate" "github" {
   url = "https://token.actions.githubusercontent.com"
 }
 
-resource "aws_iam_openid_connect_provider" "github" {
+data "aws_iam_openid_connect_provider" "github" {
   url = "https://token.actions.githubusercontent.com"
-
-  client_id_list = [
-    "sts.amazonaws.com",
-  ]
-
-  thumbprint_list = [data.tls_certificate.github.certificates[0].sha1_fingerprint]
-
-  tags = var.tags
 }
 
 # IAM Role para GitHub Actions
@@ -28,7 +20,7 @@ resource "aws_iam_role" "github_actions" {
       {
         Effect = "Allow"
         Principal = {
-          Federated = aws_iam_openid_connect_provider.github.arn
+          Federated = data.aws_iam_openid_connect_provider.github.arn
         }
         Action = "sts:AssumeRoleWithWebIdentity"
         Condition = {
