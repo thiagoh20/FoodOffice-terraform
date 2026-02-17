@@ -1,0 +1,57 @@
+name: CD - Staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  ENVIRONMENT: staging
+
+jobs:
+  deploy:
+    name: Deploy a Staging
+    runs-on: ubuntu-latest
+    environment: staging
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'pnpm'
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Build aplicación
+        run: pnpm build
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Terraform Init
+        working-directory: ./infrastructure/terraform/environments/staging
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: ./infrastructure/terraform/environments/staging
+        run: terraform plan -out=tfplan
+        env:
+          TF_VAR_environment: ${{ env.ENVIRONMENT }}
+
+      - name: Terraform Apply
+        working-directory: ./infrastructure/terraform/environments/staging
+        run: terraform apply -auto-approve tfplan
+        env:
+          TF_VAR_environment: ${{ env.ENVIRONMENT }}

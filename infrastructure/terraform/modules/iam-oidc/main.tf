@@ -1,5 +1,7 @@
 # terraform/modules/iam-oidc/main.tf
 # OIDC Provider para GitHub
+# NOTA: Si el OIDC provider ya existe en tu cuenta de AWS, 
+# necesitarás importarlo primero: terraform import module.iam_oidc.aws_iam_openid_connect_provider.github arn:aws:iam::ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com
 data "tls_certificate" "github" {
   url = "https://token.actions.githubusercontent.com"
 }
@@ -85,6 +87,42 @@ resource "aws_iam_role_policy" "cloudfront_access" {
           "cloudfront:ListInvalidations"
         ]
         Resource = var.distribution_arn
+      }
+    ]
+  })
+}
+
+# Política para Terraform (permisos necesarios para crear/modificar recursos)
+resource "aws_iam_role_policy" "terraform_access" {
+  name = "terraform-access"
+  role = aws_iam_role.github_actions.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:*",
+          "cloudfront:*",
+          "iam:CreateRole",
+          "iam:DeleteRole",
+          "iam:GetRole",
+          "iam:ListRolePolicies",
+          "iam:ListAttachedRolePolicies",
+          "iam:PutRolePolicy",
+          "iam:DeleteRolePolicy",
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+          "iam:CreateOpenIDConnectProvider",
+          "iam:GetOpenIDConnectProvider",
+          "iam:ListOpenIDConnectProviders",
+          "iam:TagOpenIDConnectProvider",
+          "iam:UntagOpenIDConnectProvider",
+          "iam:UpdateOpenIDConnectProviderThumbprint",
+          "iam:DeleteOpenIDConnectProvider"
+        ]
+        Resource = "*"
       }
     ]
   })

@@ -15,3 +15,13 @@ variable "region" {
   type        = string
   default     = "us-east-1"
 }
+
+variable "bucket_name" {
+  description = "Nombre del bucket de S3 (debe ser único globalmente)"
+  type        = string
+}
+
+variable "github_repository" {
+  description = "Repositorio de GitHub en formato 'owner/repo' (ej: 'usuario/foodoffice')"
+  type        = string
+}

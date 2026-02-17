@@ -8,4 +8,13 @@ output "project_name" {
   value       = var.project_name
 }
 
+output "github_actions_role_arn" {
+  description = "ARN del rol de IAM para GitHub Actions (OIDC)"
+  value       = module.iam_oidc.role_arn
+}
+
+output "github_actions_role_name" {
+  description = "Nombre del rol de IAM para GitHub Actions"
+  value       = module.iam_oidc.role_name
+}
 

@@ -1,16 +1,17 @@
-terraform {
-  # Backend específico para dev (opcional)
-  # backend "s3" {
-  #   bucket = "foodoffice-terraform-state-dev"
-  #   key    = "dev/terraform.tfstate"
-  #   region = "us-east-1"
-  # }
-}
 
 module "infrastructure" {
   source = "../../"
 
-  environment = var.environment
-  project_name = var.project_name
-  region = var.region
+  environment     = var.environment
+  project_name    = var.project_name
+  region          = var.region
+  aws_region      = var.region
+  bucket_name     = var.bucket_name
+  github_repository = var.github_repository
+  
+  tags = {
+    Project     = var.project_name
+    ManagedBy   = "Terraform"
+    Environment = var.environment
+  }
 }
