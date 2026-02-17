@@ -4,6 +4,11 @@ variable "github_repository" {
   type        = string
 }
 
+variable "environment" {
+  description = "Ambiente de despliegue (dev, staging, prod)"
+  type        = string
+}
+
 variable "bucket_arn" {
   description = "ARN del bucket de S3"
   type        = string

@@ -9,6 +9,11 @@ variable "bucket_id" {
   type        = string
 }
 
+variable "environment" {
+  description = "Ambiente de despliegue (dev, staging, prod)"
+  type        = string
+}
+
 variable "tags" {
   description = "Tags para aplicar a los recursos"
   type        = map(string)

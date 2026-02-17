@@ -30,6 +30,7 @@ module "cloudfront" {
   
   bucket_domain_name = module.s3.bucket_domain_name
   bucket_id          = module.s3.bucket_id
+  environment        = var.environment
   tags               = var.tags
 }
 
@@ -65,6 +66,7 @@ module "iam_oidc" {
   source = "./modules/iam-oidc"
   
   github_repository = var.github_repository
+  environment       = var.environment
   bucket_arn        = module.s3.bucket_arn
   distribution_arn  = module.cloudfront.distribution_arn
   tags              = var.tags
