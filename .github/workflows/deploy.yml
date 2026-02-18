@@ -1,140 +1,140 @@
-name: Deploy Frontend
+# name: Deploy Frontend
 
-on:
-  push:
-    branches:
-      - main
-      - develop
-      - staging
-  workflow_dispatch:
-    inputs:
-      action:
-        description: "Deploy Manual"
-        required: true
-        default: "deploy-develop"
-        type: choice
-        options:
-          - deploy-develop
-          - deploy-staging
-          - deploy-production
+# on:
+#   push:
+#     branches:
+#       - main
+#       - develop
+#       - staging
+#   workflow_dispatch:
+#     inputs:
+#       action:
+#         description: "Deploy Manual"
+#         required: true
+#         default: "deploy-develop"
+#         type: choice
+#         options:
+#           - deploy-develop
+#           - deploy-staging
+#           - deploy-production
 
-jobs:
-  deploy-develop-manual:
-    name: Deploy Develop (Manual)
-    if: inputs.action == 'deploy-develop'
-    uses: ./.github/workflows/deploy-frontend.yml
-    with:
-      build-command: "pnpm build"
-      dist-folder: "dist"
-      environment: "dev"
-      s3-bucket-name: ${{ secrets.S3_BUCKET_NAME_DEV }}
-      project-name: "foodoffice"
-      aws-region: "us-east-2"
-    secrets:
-      CLOUDFRONT_ID: ${{ secrets.CLOUDFRONT_ID_DEV }}
-      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
-      CLIENT_ID: ${{ secrets.CLIENT_ID_DEV }}
-      CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_DEV }}
-      APP_ID: ${{ secrets.APP_ID_DEV }}
-      SOCKET_URL: ${{ secrets.SOCKET_URL_DEV }}
-      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+# jobs:
+#   deploy-develop-manual:
+#     name: Deploy Develop (Manual)
+#     if: inputs.action == 'deploy-develop'
+#     uses: ./.github/workflows/deploy-frontend.yml
+#     with:
+#       build-command: "pnpm build"
+#       dist-folder: "dist"
+#       environment: "dev"
+#       s3-bucket-name: ${{ secrets.S3_BUCKET_NAME_DEV }}
+#       project-name: "foodoffice"
+#       aws-region: "us-east-2"
+#     secrets:
+#       CLOUDFRONT_ID: ${{ secrets.CLOUDFRONT_ID_DEV }}
+#       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+#       CLIENT_ID: ${{ secrets.CLIENT_ID_DEV }}
+#       CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_DEV }}
+#       APP_ID: ${{ secrets.APP_ID_DEV }}
+#       SOCKET_URL: ${{ secrets.SOCKET_URL_DEV }}
+#       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
 
-  deploy-develop:
-    name: Deploy Develop
-    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
-    uses: ./.github/workflows/deploy-frontend.yml
-    with:
-      build-command: "pnpm build"
-      dist-folder: "dist"
-      environment: "dev"
-      s3-bucket-name: ${{ secrets.S3_BUCKET_NAME_DEV }}
-      project-name: "foodoffice"
-      aws-region: "us-east-2"
-    secrets:
-      CLOUDFRONT_ID: ${{ secrets.CLOUDFRONT_ID_DEV }}
-      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
-      CLIENT_ID: ${{ secrets.CLIENT_ID_DEV }}
-      CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_DEV }}
-      APP_ID: ${{ secrets.APP_ID_DEV }}
-      SOCKET_URL: ${{ secrets.SOCKET_URL_DEV }}
-      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+#   deploy-develop:
+#     name: Deploy Develop
+#     if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+#     uses: ./.github/workflows/deploy-frontend.yml
+#     with:
+#       build-command: "pnpm build"
+#       dist-folder: "dist"
+#       environment: "dev"
+#       s3-bucket-name: ${{ secrets.S3_BUCKET_NAME_DEV }}
+#       project-name: "foodoffice"
+#       aws-region: "us-east-2"
+#     secrets:
+#       CLOUDFRONT_ID: ${{ secrets.CLOUDFRONT_ID_DEV }}
+#       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+#       CLIENT_ID: ${{ secrets.CLIENT_ID_DEV }}
+#       CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_DEV }}
+#       APP_ID: ${{ secrets.APP_ID_DEV }}
+#       SOCKET_URL: ${{ secrets.SOCKET_URL_DEV }}
+#       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
 
-  deploy-staging-manual:
-    name: Deploy Staging (Manual)
-    if: inputs.action == 'deploy-staging'
-    uses: ./.github/workflows/deploy-frontend.yml
-    with:
-      build-command: "pnpm build"
-      dist-folder: "dist"
-      environment: "staging"
-      s3-bucket-name: ${{ secrets.S3_BUCKET_NAME_STAGING }}
-      project-name: "foodoffice"
-      aws-region: "us-east-2"
-    secrets:
-      CLOUDFRONT_ID: ${{ secrets.CLOUDFRONT_ID_STAGING }}
-      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
-      CLIENT_ID: ${{ secrets.CLIENT_ID_STAGING }}
-      CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_STAGING }}
-      APP_ID: ${{ secrets.APP_ID_STAGING }}
-      SOCKET_URL: ${{ secrets.SOCKET_URL_STAGING }}
-      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+#   deploy-staging-manual:
+#     name: Deploy Staging (Manual)
+#     if: inputs.action == 'deploy-staging'
+#     uses: ./.github/workflows/deploy-frontend.yml
+#     with:
+#       build-command: "pnpm build"
+#       dist-folder: "dist"
+#       environment: "staging"
+#       s3-bucket-name: ${{ secrets.S3_BUCKET_NAME_STAGING }}
+#       project-name: "foodoffice"
+#       aws-region: "us-east-2"
+#     secrets:
+#       CLOUDFRONT_ID: ${{ secrets.CLOUDFRONT_ID_STAGING }}
+#       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+#       CLIENT_ID: ${{ secrets.CLIENT_ID_STAGING }}
+#       CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_STAGING }}
+#       APP_ID: ${{ secrets.APP_ID_STAGING }}
+#       SOCKET_URL: ${{ secrets.SOCKET_URL_STAGING }}
+#       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
 
-  deploy-staging:
-    name: Deploy Staging
-    if: github.ref == 'refs/heads/staging' && github.event_name == 'push'
-    uses: ./.github/workflows/deploy-frontend.yml
-    with:
-      build-command: "pnpm build"
-      dist-folder: "dist"
-      environment: "staging"
-      s3-bucket-name: ${{ secrets.S3_BUCKET_NAME_STAGING }}
-      project-name: "foodoffice"
-      aws-region: "us-east-2"
-    secrets:
-      CLOUDFRONT_ID: ${{ secrets.CLOUDFRONT_ID_STAGING }}
-      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
-      CLIENT_ID: ${{ secrets.CLIENT_ID_STAGING }}
-      CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_STAGING }}
-      APP_ID: ${{ secrets.APP_ID_STAGING }}
-      SOCKET_URL: ${{ secrets.SOCKET_URL_STAGING }}
-      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+#   deploy-staging:
+#     name: Deploy Staging
+#     if: github.ref == 'refs/heads/staging' && github.event_name == 'push'
+#     uses: ./.github/workflows/deploy-frontend.yml
+#     with:
+#       build-command: "pnpm build"
+#       dist-folder: "dist"
+#       environment: "staging"
+#       s3-bucket-name: ${{ secrets.S3_BUCKET_NAME_STAGING }}
+#       project-name: "foodoffice"
+#       aws-region: "us-east-2"
+#     secrets:
+#       CLOUDFRONT_ID: ${{ secrets.CLOUDFRONT_ID_STAGING }}
+#       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+#       CLIENT_ID: ${{ secrets.CLIENT_ID_STAGING }}
+#       CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_STAGING }}
+#       APP_ID: ${{ secrets.APP_ID_STAGING }}
+#       SOCKET_URL: ${{ secrets.SOCKET_URL_STAGING }}
+#       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
 
-  deploy-production-manual:
-    name: Deploy Production (Manual)
-    if: inputs.action == 'deploy-production'
-    uses: ./.github/workflows/deploy-frontend.yml
-    with:
-      build-command: "pnpm build"
-      dist-folder: "dist"
-      environment: "production"
-      s3-bucket-name: ${{ secrets.S3_BUCKET_NAME_PRODUCTION }}
-      project-name: "foodoffice"
-      aws-region: "us-east-2"
-    secrets:
-      CLOUDFRONT_ID: ${{ secrets.CLOUDFRONT_ID_PRODUCTION }}
-      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
-      CLIENT_ID: ${{ secrets.CLIENT_ID_PROD }}
-      CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_PROD }}
-      APP_ID: ${{ secrets.APP_ID_PROD }}
-      SOCKET_URL: ${{ secrets.SOCKET_URL_PROD }}
-      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+#   deploy-production-manual:
+#     name: Deploy Production (Manual)
+#     if: inputs.action == 'deploy-production'
+#     uses: ./.github/workflows/deploy-frontend.yml
+#     with:
+#       build-command: "pnpm build"
+#       dist-folder: "dist"
+#       environment: "production"
+#       s3-bucket-name: ${{ secrets.S3_BUCKET_NAME_PRODUCTION }}
+#       project-name: "foodoffice"
+#       aws-region: "us-east-2"
+#     secrets:
+#       CLOUDFRONT_ID: ${{ secrets.CLOUDFRONT_ID_PRODUCTION }}
+#       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+#       CLIENT_ID: ${{ secrets.CLIENT_ID_PROD }}
+#       CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_PROD }}
+#       APP_ID: ${{ secrets.APP_ID_PROD }}
+#       SOCKET_URL: ${{ secrets.SOCKET_URL_PROD }}
+#       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
 
-  deploy-production:
-    name: Deploy Production
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    uses: ./.github/workflows/deploy-frontend.yml
-    with:
-      build-command: "pnpm build"
-      dist-folder: "dist"
-      environment: "production"
-      s3-bucket-name: ${{ secrets.S3_BUCKET_NAME_PRODUCTION }}
-      project-name: "foodoffice"
-      aws-region: "us-east-2"
-    secrets:
-      CLOUDFRONT_ID: ${{ secrets.CLOUDFRONT_ID_PRODUCTION }}
-      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
-      CLIENT_ID: ${{ secrets.CLIENT_ID_PROD }}
-      CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_PROD }}
-      APP_ID: ${{ secrets.APP_ID_PROD }}
-      SOCKET_URL: ${{ secrets.SOCKET_URL_PROD }}
-      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+#   deploy-production:
+#     name: Deploy Production
+#     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+#     uses: ./.github/workflows/deploy-frontend.yml
+#     with:
+#       build-command: "pnpm build"
+#       dist-folder: "dist"
+#       environment: "production"
+#       s3-bucket-name: ${{ secrets.S3_BUCKET_NAME_PRODUCTION }}
+#       project-name: "foodoffice"
+#       aws-region: "us-east-2"
+#     secrets:
+#       CLOUDFRONT_ID: ${{ secrets.CLOUDFRONT_ID_PRODUCTION }}
+#       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+#       CLIENT_ID: ${{ secrets.CLIENT_ID_PROD }}
+#       CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_PROD }}
+#       APP_ID: ${{ secrets.APP_ID_PROD }}
+#       SOCKET_URL: ${{ secrets.SOCKET_URL_PROD }}
+#       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
