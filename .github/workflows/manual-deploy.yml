@@ -10,6 +10,7 @@ on:
         type: choice
         options:
           - apply
+          - destroy
 
 concurrency:
   group: terraform-${{ github.ref_name }}
@@ -64,6 +65,51 @@ jobs:
       - name: Terraform Apply
         working-directory: ./terraform
         run: terraform apply -auto-approve tfplan
+        env:
+          TF_VAR_environment: dev
+          TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
+          TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
+          TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
+
+  destroy-development:
+    if: inputs.action == 'destroy' && github.ref == 'refs/heads/develop'
+    name: Destroy Infraestructura de Desarrollo
+    runs-on: ubuntu-latest
+    environment: development
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.4
+
+      - name: Configure Git credentials for private modules
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: |
+          terraform init \
+            -backend-config="bucket=foodoffice-terraform-state" \
+            -backend-config="key=environments/dev/terraform.tfstate" \
+            -backend-config="region=us-east-2" \
+            -backend-config="dynamodb_table=terraform-state-lock" \
+            -backend-config="encrypt=true"
+
+      - name: Terraform Destroy
+        working-directory: ./terraform
+        run: terraform destroy -auto-approve
         env:
           TF_VAR_environment: dev
           TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
