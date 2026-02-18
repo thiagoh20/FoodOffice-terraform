@@ -53,46 +53,55 @@ jobs:
             -backend-config="dynamodb_table=terraform-state-lock" \
             -backend-config="encrypt=true"
 
-      - name: Limpiar OAC huérfano si existe
+      - name: Importar OAC existente si es necesario
         working-directory: ./terraform
         run: |
-          # Buscar OACs que puedan estar huérfanos (no asociados a distribuciones activas)
-          echo "Buscando OACs huérfanos..."
+          # Primero intentar obtener el bucket del estado
+          BUCKET_NAME=$(terraform output -raw s3_bucket_name 2>/dev/null || echo "")
           
-          # Listar todos los OACs
-          OAC_LIST=$(aws cloudfront list-origin-access-controls --output json 2>/dev/null || echo '{"OriginAccessControlList":{"Items":[]}}')
+          # Si no está en el estado, buscar todos los OACs que coincidan con el patrón
+          if [ -z "$BUCKET_NAME" ]; then
+            echo "Bucket no encontrado en el estado, buscando OACs existentes..."
+            # Buscar cualquier OAC que contenga foodoffice-frontend y dev-oac
+            OAC_INFO=$(aws cloudfront list-origin-access-controls \
+              --query "OriginAccessControlList.Items[?contains(Name, 'foodoffice-frontend') && contains(Name, 'dev-oac')].{Id:Id, Name:Name}" \
+              --output json 2>/dev/null || echo '[]')
+            
+            # Obtener el primer OAC encontrado
+            OAC_ID=$(echo "$OAC_INFO" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data[0]['Id'] if data else '')" 2>/dev/null || echo "")
+            OAC_NAME=$(echo "$OAC_INFO" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data[0]['Name'] if data else '')" 2>/dev/null || echo "")
+          else
+            # Si tenemos el bucket, construir el nombre exacto del OAC
+            OAC_NAME="${BUCKET_NAME}-dev-oac"
+            echo "Buscando OAC con nombre exacto: $OAC_NAME"
+            # Obtener solo el primer ID, limpiando tabs y espacios
+            OAC_ID=$(aws cloudfront list-origin-access-controls \
+              --query "OriginAccessControlList.Items[?Name=='$OAC_NAME'].Id" \
+              --output text 2>/dev/null | head -1 | awk '{print $1}' | tr -d '\t' || echo "")
+          fi
           
-          # Buscar OACs que contengan "foodoffice-frontend" y "dev"
-          echo "$OAC_LIST" | python3 -c "
-          import json, sys, subprocess
-          data = json.load(sys.stdin)
-          oacs = data.get('OriginAccessControlList', {}).get('Items', [])
+          # Limpiar el OAC_ID de cualquier carácter extraño y validar formato
+          OAC_ID=$(echo "$OAC_ID" | awk '{print $1}' | grep -oP '^E[A-Z0-9]{12,13}$' | head -1 || echo "")
           
-          for oac in oacs:
-              name = oac.get('Name', '')
-              oac_id = oac.get('Id', '')
-              
-              if 'foodoffice-frontend' in name and 'dev' in name:
-                  print(f'Encontrado OAC: {name} (ID: {oac_id})')
-                  
-                  # Verificar si está en uso
-                  result = subprocess.run(
-                      ['aws', 'cloudfront', 'list-distributions', '--query', 
-                       f\"DistributionList.Items[?Origins.Items[?OriginAccessControlId=='{oac_id}']].Id\", 
-                       '--output', 'text'],
-                      capture_output=True, text=True
-                  )
-                  
-                  dist_ids = result.stdout.strip()
-                  
-                  if not dist_ids or dist_ids == 'None':
-                      print(f'OAC {oac_id} no está en uso, eliminándolo...')
-                      subprocess.run(['aws', 'cloudfront', 'delete-origin-access-control', '--id', oac_id], 
-                                   capture_output=True)
-                      print(f'OAC {oac_id} eliminado')
-                  else:
-                      print(f'OAC {oac_id} está en uso por: {dist_ids}')
-          " || echo "No se encontraron OACs huérfanos o error al procesar"
+          if [ -n "$OAC_ID" ] && [ "$OAC_ID" != "None" ] && [ "$OAC_ID" != "" ]; then
+            echo "OAC existente encontrado: $OAC_NAME (ID: $OAC_ID)"
+            echo "Intentando importar al estado de Terraform..."
+            
+            # Intentar importar el OAC
+            terraform import "module.foodoffice_frontend_cloudfront.aws_cloudfront_origin_access_control.s3_oac" "$OAC_ID" 2>&1 && {
+              echo "✅ OAC importado exitosamente"
+            } || {
+              echo "⚠️ No se pudo importar (puede que ya esté en el estado)"
+            }
+          else
+            echo "No se encontró OAC existente válido, se creará uno nuevo"
+            echo "OAC_ID procesado fue: '$OAC_ID'"
+          fi
+        env:
+          TF_VAR_environment: dev
+          TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
+          TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
+          TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
         continue-on-error: true
 
       - name: Terraform Plan
@@ -103,6 +112,63 @@ jobs:
           TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
           TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
           TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
+
+      - name: Verificar e importar OAC antes de apply
+        working-directory: ./terraform
+        run: |
+          # Verificar si el OAC está en el estado
+          if ! terraform state list 2>/dev/null | grep -q "module.foodoffice_frontend_cloudfront.aws_cloudfront_origin_access_control.s3_oac"; then
+            echo "OAC no está en el estado, intentando importarlo..."
+            
+            # Obtener el bucket del estado (ahora debería existir después del plan)
+            BUCKET_NAME=$(terraform output -raw s3_bucket_name 2>/dev/null || echo "")
+            
+            if [ -z "$BUCKET_NAME" ]; then
+              echo "Bucket no encontrado en outputs, buscando en el estado..."
+              # Intentar obtener del estado directamente
+              BUCKET_NAME=$(terraform state show module.foodoffice_frontend_bucket_name.aws_s3_bucket.frontend 2>/dev/null | grep -oP 'id\s*=\s*"\K[^"]+' | head -1 || echo "")
+            fi
+            
+            if [ -z "$BUCKET_NAME" ]; then
+              # Último recurso: buscar cualquier OAC que coincida
+              echo "Buscando OACs que coincidan con el patrón..."
+              OAC_INFO=$(aws cloudfront list-origin-access-controls \
+                --query "OriginAccessControlList.Items[?contains(Name, 'foodoffice-frontend') && contains(Name, 'dev-oac')].{Id:Id, Name:Name}" \
+                --output json 2>/dev/null || echo '[]')
+              
+              OAC_ID=$(echo "$OAC_INFO" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data[0]['Id'] if data else '')" 2>/dev/null || echo "")
+              if [ -n "$OAC_ID" ]; then
+                OAC_NAME=$(echo "$OAC_INFO" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data[0]['Name'] if data else '')" 2>/dev/null || echo "")
+                echo "OAC encontrado por patrón: $OAC_NAME (ID: $OAC_ID)"
+              fi
+            else
+              OAC_NAME="${BUCKET_NAME}-dev-oac"
+              echo "Buscando OAC con nombre exacto: $OAC_NAME"
+              OAC_ID=$(aws cloudfront list-origin-access-controls \
+                --query "OriginAccessControlList.Items[?Name=='$OAC_NAME'].Id" \
+                --output text 2>/dev/null | head -1 || echo "")
+            fi
+            
+            if [ -n "$OAC_ID" ] && [ "$OAC_ID" != "None" ] && [ "$OAC_ID" != "" ]; then
+              echo "Importando OAC: $OAC_ID"
+              terraform import "module.foodoffice_frontend_cloudfront.aws_cloudfront_origin_access_control.s3_oac" "$OAC_ID" && {
+                echo "✅ OAC importado exitosamente, regenerando plan..."
+                terraform plan -out=tfplan
+              } || {
+                echo "⚠️ No se pudo importar el OAC"
+              }
+            else
+              echo "No se encontró OAC para importar"
+            fi
+          else
+            echo "✅ OAC ya está en el estado"
+          fi
+        env:
+          TF_VAR_environment: dev
+          TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
+          TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
+          TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
+        continue-on-error: true
 
       - name: Terraform Apply
         working-directory: ./terraform
