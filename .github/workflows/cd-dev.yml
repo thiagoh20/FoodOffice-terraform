@@ -53,11 +53,11 @@ jobs:
           terraform_version: 1.13.4
 
       - name: Terraform Init
-        working-directory: ./infrastructure/terraform/environments/dev
+        working-directory: ./terraform
         run: terraform init
 
       - name: Terraform Plan
-        working-directory: ./infrastructure/terraform/environments/dev
+        working-directory: ./terraform
         run: terraform plan -out=tfplan
         env:
           TF_VAR_environment: ${{ env.ENVIRONMENT }}
