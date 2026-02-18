@@ -20,15 +20,25 @@ output "github_actions_role_name" {
 
 output "cloudfront_distribution_id" {
   description = "ID de la distribución de CloudFront"
-  value       = module.cloudfront.distribution_id
+  value       = module.foodoffice_frontend_cloudfront.distribution_id
 }
 
 output "cloudfront_distribution_url" {
   description = "URL completa de la distribución de CloudFront"
-  value       = module.cloudfront.distribution_url
+  value       = module.foodoffice_frontend_cloudfront.distribution_url
+}
+
+output "cloudfront_distribution_arn" {
+  description = "ARN de la distribución de CloudFront"
+  value       = module.foodoffice_frontend_cloudfront.distribution_arn
 }
 
 output "s3_bucket_name" {
   description = "Nombre del bucket S3"
-  value       = module.s3.bucket_name
+  value       = module.foodoffice_frontend_bucket_name.bucket_id
+}
+
+output "s3_bucket_arn" {
+  description = "ARN del bucket S3"
+  value       = module.foodoffice_frontend_bucket_name.bucket_arn
 }

@@ -63,11 +63,3 @@ jobs:
           TF_VAR_environment: ${{ env.ENVIRONMENT }}
           TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
           TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
-
-      - name: Terraform Apply
-        working-directory: ./infrastructure/terraform/environments/dev
-        run: terraform apply -auto-approve tfplan
-        env:
-          TF_VAR_environment: ${{ env.ENVIRONMENT }}
-          TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
-          TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
