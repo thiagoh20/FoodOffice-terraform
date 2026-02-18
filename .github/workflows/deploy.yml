@@ -1,140 +1,260 @@
-# name: Deploy Frontend
+name: Deploy Frontend
 
-# on:
-#   push:
-#     branches:
-#       - main
-#       - develop
-#       - staging
-#   workflow_dispatch:
-#     inputs:
-#       action:
-#         description: "Deploy Manual"
-#         required: true
-#         default: "deploy-develop"
-#         type: choice
-#         options:
-#           - deploy-develop
-#           - deploy-staging
-#           - deploy-production
+on:
+  push:
+    branches:
+      - develop
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
 
-# jobs:
-#   deploy-develop-manual:
-#     name: Deploy Develop (Manual)
-#     if: inputs.action == 'deploy-develop'
-#     uses: ./.github/workflows/deploy-frontend.yml
-#     with:
-#       build-command: "pnpm build"
-#       dist-folder: "dist"
-#       environment: "dev"
-#       s3-bucket-name: ${{ secrets.S3_BUCKET_NAME_DEV }}
-#       project-name: "foodoffice"
-#       aws-region: "us-east-2"
-#     secrets:
-#       CLOUDFRONT_ID: ${{ secrets.CLOUDFRONT_ID_DEV }}
-#       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
-#       CLIENT_ID: ${{ secrets.CLIENT_ID_DEV }}
-#       CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_DEV }}
-#       APP_ID: ${{ secrets.APP_ID_DEV }}
-#       SOCKET_URL: ${{ secrets.SOCKET_URL_DEV }}
-#       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+concurrency:
+  group: deploy-${{ github.ref_name }}-${{ inputs.environment || 'dev' }}
+  cancel-in-progress: false
 
-#   deploy-develop:
-#     name: Deploy Develop
-#     if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
-#     uses: ./.github/workflows/deploy-frontend.yml
-#     with:
-#       build-command: "pnpm build"
-#       dist-folder: "dist"
-#       environment: "dev"
-#       s3-bucket-name: ${{ secrets.S3_BUCKET_NAME_DEV }}
-#       project-name: "foodoffice"
-#       aws-region: "us-east-2"
-#     secrets:
-#       CLOUDFRONT_ID: ${{ secrets.CLOUDFRONT_ID_DEV }}
-#       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
-#       CLIENT_ID: ${{ secrets.CLIENT_ID_DEV }}
-#       CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_DEV }}
-#       APP_ID: ${{ secrets.APP_ID_DEV }}
-#       SOCKET_URL: ${{ secrets.SOCKET_URL_DEV }}
-#       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+jobs:
+  deploy-dev:
+    name: Deploy a Desarrollo
+    if: |
+      (github.ref == 'refs/heads/develop' && github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && inputs.environment == 'dev')
+    runs-on: ubuntu-latest
+    environment: development
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
 
-#   deploy-staging-manual:
-#     name: Deploy Staging (Manual)
-#     if: inputs.action == 'deploy-staging'
-#     uses: ./.github/workflows/deploy-frontend.yml
-#     with:
-#       build-command: "pnpm build"
-#       dist-folder: "dist"
-#       environment: "staging"
-#       s3-bucket-name: ${{ secrets.S3_BUCKET_NAME_STAGING }}
-#       project-name: "foodoffice"
-#       aws-region: "us-east-2"
-#     secrets:
-#       CLOUDFRONT_ID: ${{ secrets.CLOUDFRONT_ID_STAGING }}
-#       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
-#       CLIENT_ID: ${{ secrets.CLIENT_ID_STAGING }}
-#       CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_STAGING }}
-#       APP_ID: ${{ secrets.APP_ID_STAGING }}
-#       SOCKET_URL: ${{ secrets.SOCKET_URL_STAGING }}
-#       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
 
-#   deploy-staging:
-#     name: Deploy Staging
-#     if: github.ref == 'refs/heads/staging' && github.event_name == 'push'
-#     uses: ./.github/workflows/deploy-frontend.yml
-#     with:
-#       build-command: "pnpm build"
-#       dist-folder: "dist"
-#       environment: "staging"
-#       s3-bucket-name: ${{ secrets.S3_BUCKET_NAME_STAGING }}
-#       project-name: "foodoffice"
-#       aws-region: "us-east-2"
-#     secrets:
-#       CLOUDFRONT_ID: ${{ secrets.CLOUDFRONT_ID_STAGING }}
-#       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
-#       CLIENT_ID: ${{ secrets.CLIENT_ID_STAGING }}
-#       CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_STAGING }}
-#       APP_ID: ${{ secrets.APP_ID_STAGING }}
-#       SOCKET_URL: ${{ secrets.SOCKET_URL_STAGING }}
-#       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+      - name: Instalar dependencias
+        run: npm ci
 
-#   deploy-production-manual:
-#     name: Deploy Production (Manual)
-#     if: inputs.action == 'deploy-production'
-#     uses: ./.github/workflows/deploy-frontend.yml
-#     with:
-#       build-command: "pnpm build"
-#       dist-folder: "dist"
-#       environment: "production"
-#       s3-bucket-name: ${{ secrets.S3_BUCKET_NAME_PRODUCTION }}
-#       project-name: "foodoffice"
-#       aws-region: "us-east-2"
-#     secrets:
-#       CLOUDFRONT_ID: ${{ secrets.CLOUDFRONT_ID_PRODUCTION }}
-#       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
-#       CLIENT_ID: ${{ secrets.CLIENT_ID_PROD }}
-#       CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_PROD }}
-#       APP_ID: ${{ secrets.APP_ID_PROD }}
-#       SOCKET_URL: ${{ secrets.SOCKET_URL_PROD }}
-#       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+      - name: Build aplicación
+        run: npm run build
 
-#   deploy-production:
-#     name: Deploy Production
-#     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-#     uses: ./.github/workflows/deploy-frontend.yml
-#     with:
-#       build-command: "pnpm build"
-#       dist-folder: "dist"
-#       environment: "production"
-#       s3-bucket-name: ${{ secrets.S3_BUCKET_NAME_PRODUCTION }}
-#       project-name: "foodoffice"
-#       aws-region: "us-east-2"
-#     secrets:
-#       CLOUDFRONT_ID: ${{ secrets.CLOUDFRONT_ID_PRODUCTION }}
-#       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
-#       CLIENT_ID: ${{ secrets.CLIENT_ID_PROD }}
-#       CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_PROD }}
-#       APP_ID: ${{ secrets.APP_ID_PROD }}
-#       SOCKET_URL: ${{ secrets.SOCKET_URL_PROD }}
-#       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Configure Git credentials for private modules
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.4
+
+      - name: Obtener outputs de Terraform
+        id: terraform-outputs
+        working-directory: ./terraform
+        run: |
+          terraform init \
+            -backend-config="bucket=foodoffice-terraform-state" \
+            -backend-config="key=environments/dev/terraform.tfstate" \
+            -backend-config="region=us-east-2" \
+            -backend-config="dynamodb_table=terraform-state-lock" \
+            -backend-config="encrypt=true" \
+            -reconfigure
+          
+          S3_BUCKET=$(terraform output -raw s3_bucket_name)
+          CLOUDFRONT_ID=$(terraform output -raw cloudfront_distribution_id)
+          
+          echo "bucket=$S3_BUCKET" >> $GITHUB_OUTPUT
+          echo "cloudfront_id=$CLOUDFRONT_ID" >> $GITHUB_OUTPUT
+          
+          echo "S3 Bucket: $S3_BUCKET"
+          echo "CloudFront ID: $CLOUDFRONT_ID"
+
+      - name: Sincronizar archivos con S3
+        run: |
+          aws s3 sync dist/ s3://${{ steps.terraform-outputs.outputs.bucket }}/ \
+            --delete \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "index.html" \
+            --exclude "*.html"
+          
+          # Subir HTML sin cache para que siempre se actualice
+          aws s3 sync dist/ s3://${{ steps.terraform-outputs.outputs.bucket }}/ \
+            --cache-control "public, max-age=0, must-revalidate" \
+            --include "*.html"
+
+      - name: Invalidar CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ steps.terraform-outputs.outputs.cloudfront_id }} \
+            --paths "/*"
+
+      - name: Mostrar URL de despliegue
+        run: |
+          echo "✅ Deploy completado exitosamente!"
+          echo "🌐 URL: https://d1uqyc0dzqbxs5.cloudfront.net"
+
+  deploy-staging:
+    name: Deploy a Staging
+    if: |
+      (github.ref == 'refs/heads/staging' && github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging')
+    runs-on: ubuntu-latest
+    environment: staging
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Build aplicación
+        run: npm run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Configure Git credentials for private modules
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.4
+
+      - name: Obtener outputs de Terraform
+        id: terraform-outputs
+        working-directory: ./terraform
+        run: |
+          terraform init \
+            -backend-config="bucket=foodoffice-terraform-state" \
+            -backend-config="key=environments/staging/terraform.tfstate" \
+            -backend-config="region=us-east-2" \
+            -backend-config="dynamodb_table=terraform-state-lock" \
+            -backend-config="encrypt=true" \
+            -reconfigure
+          
+          S3_BUCKET=$(terraform output -raw s3_bucket_name)
+          CLOUDFRONT_ID=$(terraform output -raw cloudfront_distribution_id)
+          
+          echo "bucket=$S3_BUCKET" >> $GITHUB_OUTPUT
+          echo "cloudfront_id=$CLOUDFRONT_ID" >> $GITHUB_OUTPUT
+
+      - name: Sincronizar archivos con S3
+        run: |
+          aws s3 sync dist/ s3://${{ steps.terraform-outputs.outputs.bucket }}/ \
+            --delete \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "index.html" \
+            --exclude "*.html"
+          
+          aws s3 sync dist/ s3://${{ steps.terraform-outputs.outputs.bucket }}/ \
+            --cache-control "public, max-age=0, must-revalidate" \
+            --include "*.html"
+
+      - name: Invalidar CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ steps.terraform-outputs.outputs.cloudfront_id }} \
+            --paths "/*"
+
+  deploy-prod:
+    name: Deploy a Producción
+    if: |
+      (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && inputs.environment == 'prod')
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Build aplicación
+        run: npm run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Configure Git credentials for private modules
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.4
+
+      - name: Obtener outputs de Terraform
+        id: terraform-outputs
+        working-directory: ./terraform
+        run: |
+          terraform init \
+            -backend-config="bucket=foodoffice-terraform-state" \
+            -backend-config="key=environments/prod/terraform.tfstate" \
+            -backend-config="region=us-east-2" \
+            -backend-config="dynamodb_table=terraform-state-lock" \
+            -backend-config="encrypt=true" \
+            -reconfigure
+          
+          S3_BUCKET=$(terraform output -raw s3_bucket_name)
+          CLOUDFRONT_ID=$(terraform output -raw cloudfront_distribution_id)
+          
+          echo "bucket=$S3_BUCKET" >> $GITHUB_OUTPUT
+          echo "cloudfront_id=$CLOUDFRONT_ID" >> $GITHUB_OUTPUT
+
+      - name: Sincronizar archivos con S3
+        run: |
+          aws s3 sync dist/ s3://${{ steps.terraform-outputs.outputs.bucket }}/ \
+            --delete \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "index.html" \
+            --exclude "*.html"
+          
+          aws s3 sync dist/ s3://${{ steps.terraform-outputs.outputs.bucket }}/ \
+            --cache-control "public, max-age=0, must-revalidate" \
+            --include "*.html"
+
+      - name: Invalidar CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ steps.terraform-outputs.outputs.cloudfront_id }} \
+            --paths "/*"
