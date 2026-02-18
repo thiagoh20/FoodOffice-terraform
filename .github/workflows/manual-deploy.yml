@@ -251,12 +251,7 @@ jobs:
               VERSIONS=$(aws s3api list-object-versions --bucket "$BUCKET_NAME" \
                 --query='{Objects: Versions[].{Key:Key,VersionId:VersionId}, DeleteMarkers: DeleteMarkers[].{Key:Key,VersionId:VersionId}}' \
                 --output json 2>/dev/null || echo '{"Objects":[],"DeleteMarkers":[]}')
-              ALL_OBJECTS=$(echo "$VERSIONS" | python3 -c "import sys, json
-data = json.load(sys.stdin)
-objs = []
-objs.extend(data.get('Objects', []))
-objs.extend(data.get('DeleteMarkers', []))
-print(json.dumps({'Objects': objs}) if objs else '{\"Objects\":[]}')")
+              ALL_OBJECTS=$(echo "$VERSIONS" | python3 -c "import sys, json; data = json.load(sys.stdin); objs = []; objs.extend(data.get('Objects', [])); objs.extend(data.get('DeleteMarkers', [])); print(json.dumps({'Objects': objs}) if objs else '{\"Objects\":[]}')")
               if [ "$ALL_OBJECTS" != '{"Objects":[]}' ] && [ -n "$ALL_OBJECTS" ]; then
                 echo "$ALL_OBJECTS" > /tmp/delete.json
                 aws s3api delete-objects --bucket "$BUCKET_NAME" --delete file:///tmp/delete.json || break
