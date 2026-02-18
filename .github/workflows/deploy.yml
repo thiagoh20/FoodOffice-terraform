@@ -76,12 +76,15 @@ jobs:
           
           S3_BUCKET=$(terraform output -raw s3_bucket_name)
           CLOUDFRONT_ID=$(terraform output -raw cloudfront_distribution_id)
+          CLOUDFRONT_URL=$(terraform output -raw cloudfront_distribution_url)
           
           echo "bucket=$S3_BUCKET" >> $GITHUB_OUTPUT
           echo "cloudfront_id=$CLOUDFRONT_ID" >> $GITHUB_OUTPUT
+          echo "cloudfront_url=$CLOUDFRONT_URL" >> $GITHUB_OUTPUT
           
           echo "S3 Bucket: $S3_BUCKET"
           echo "CloudFront ID: $CLOUDFRONT_ID"
+          echo "CloudFront URL: $CLOUDFRONT_URL"
 
       - name: Sincronizar archivos con S3
         run: |
@@ -105,7 +108,12 @@ jobs:
       - name: Mostrar URL de despliegue
         run: |
           echo "✅ Deploy completado exitosamente!"
-          echo "🌐 URL: https://d1uqyc0dzqbxs5.cloudfront.net"
+          echo "🌐 URL: ${{ steps.terraform-outputs.outputs.cloudfront_url }}"
+
+      - name: Mostrar URL de despliegue
+        run: |
+          echo "✅ Deploy completado exitosamente!"
+          echo "🌐 URL: ${{ steps.terraform-outputs.outputs.cloudfront_url }}"
 
   deploy-staging:
     name: Deploy a Staging
@@ -161,9 +169,11 @@ jobs:
           
           S3_BUCKET=$(terraform output -raw s3_bucket_name)
           CLOUDFRONT_ID=$(terraform output -raw cloudfront_distribution_id)
+          CLOUDFRONT_URL=$(terraform output -raw cloudfront_distribution_url)
           
           echo "bucket=$S3_BUCKET" >> $GITHUB_OUTPUT
           echo "cloudfront_id=$CLOUDFRONT_ID" >> $GITHUB_OUTPUT
+          echo "cloudfront_url=$CLOUDFRONT_URL" >> $GITHUB_OUTPUT
 
       - name: Sincronizar archivos con S3
         run: |
@@ -182,6 +192,16 @@ jobs:
           aws cloudfront create-invalidation \
             --distribution-id ${{ steps.terraform-outputs.outputs.cloudfront_id }} \
             --paths "/*"
+
+      - name: Mostrar URL de despliegue
+        run: |
+          echo "✅ Deploy completado exitosamente!"
+          echo "🌐 URL: ${{ steps.terraform-outputs.outputs.cloudfront_url }}"
+
+      - name: Mostrar URL de despliegue
+        run: |
+          echo "✅ Deploy completado exitosamente!"
+          echo "🌐 URL: ${{ steps.terraform-outputs.outputs.cloudfront_url }}"
 
   deploy-prod:
     name: Deploy a Producción
@@ -237,9 +257,11 @@ jobs:
           
           S3_BUCKET=$(terraform output -raw s3_bucket_name)
           CLOUDFRONT_ID=$(terraform output -raw cloudfront_distribution_id)
+          CLOUDFRONT_URL=$(terraform output -raw cloudfront_distribution_url)
           
           echo "bucket=$S3_BUCKET" >> $GITHUB_OUTPUT
           echo "cloudfront_id=$CLOUDFRONT_ID" >> $GITHUB_OUTPUT
+          echo "cloudfront_url=$CLOUDFRONT_URL" >> $GITHUB_OUTPUT
 
       - name: Sincronizar archivos con S3
         run: |
@@ -258,3 +280,8 @@ jobs:
           aws cloudfront create-invalidation \
             --distribution-id ${{ steps.terraform-outputs.outputs.cloudfront_id }} \
             --paths "/*"
+
+      - name: Mostrar URL de despliegue
+        run: |
+          echo "✅ Deploy completado exitosamente!"
+          echo "🌐 URL: ${{ steps.terraform-outputs.outputs.cloudfront_url }}"
