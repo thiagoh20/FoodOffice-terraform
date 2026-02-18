@@ -251,19 +251,19 @@ jobs:
               --output json 2>/dev/null || echo '{"Objects":[],"DeleteMarkers":[]}')
             
             # Combinar versiones y delete markers
-            ALL_OBJECTS=$(echo $VERSIONS | python3 -c "
-            import json, sys
-            data = json.load(sys.stdin)
-            objects = []
-            if data.get('Objects'):
-                objects.extend(data['Objects'])
-            if data.get('DeleteMarkers'):
-                objects.extend(data['DeleteMarkers'])
-            if objects:
-                print(json.dumps({'Objects': objects}))
-            else:
-                print('{\"Objects\":[]}')
-            ")
+            ALL_OBJECTS=$(echo "$VERSIONS" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+objects = []
+if data.get('Objects'):
+    objects.extend(data['Objects'])
+if data.get('DeleteMarkers'):
+    objects.extend(data['DeleteMarkers'])
+if objects:
+    print(json.dumps({'Objects': objects}))
+else:
+    print('{\"Objects\":[]}')
+")
             
             if [ "$ALL_OBJECTS" != '{"Objects":[]}' ] && [ -n "$ALL_OBJECTS" ]; then
               echo "$ALL_OBJECTS" > /tmp/delete.json
