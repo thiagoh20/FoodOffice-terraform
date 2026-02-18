@@ -34,18 +34,14 @@ jobs:
       - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
-          cache: 'pnpm'
-          cache-dependency-path: 'pnpm-lock.yaml'
+          cache: 'npm'
 
       - name: Instalar dependencias
-        run: pnpm install --frozen-lockfile
+        run: npm ci
 
       - name: Configurar variables de entorno
         run: |
@@ -66,7 +62,7 @@ jobs:
           echo "Variables configuradas (valores sensibles ocultos)"
 
       - name: Build aplicación
-        run: pnpm run build
+        run: npm run build
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -144,18 +140,14 @@ jobs:
       - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
-          cache: 'pnpm'
-          cache-dependency-path: 'pnpm-lock.yaml'
+          cache: 'npm'
 
       - name: Instalar dependencias
-        run: pnpm install --frozen-lockfile
+        run: npm ci
 
       - name: Configurar variables de entorno
         run: |
@@ -176,7 +168,7 @@ jobs:
           echo "Variables configuradas (valores sensibles ocultos)"
 
       - name: Build aplicación
-        run: pnpm run build
+        run: npm run build
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -249,18 +241,14 @@ jobs:
       - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
-          cache: 'pnpm'
-          cache-dependency-path: 'pnpm-lock.yaml'
+          cache: 'npm'
 
       - name: Instalar dependencias
-        run: pnpm install --frozen-lockfile
+        run: npm ci
 
       - name: Configurar variables de entorno
         run: |
@@ -281,7 +269,7 @@ jobs:
           echo "Variables configuradas (valores sensibles ocultos)"
 
       - name: Build aplicación
-        run: pnpm run build
+        run: npm run build
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
