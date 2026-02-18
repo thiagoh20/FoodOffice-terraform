@@ -26,6 +26,7 @@ Thumbs.db
 # ============================================
 # Dependencies
 node_modules/
+package-lock.json
 .pnp
 .pnp.js
 .yarn/cache

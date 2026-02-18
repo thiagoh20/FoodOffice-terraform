@@ -25,12 +25,7 @@ jobs:
           cache: 'npm'
 
       - name: Instalar dependencias
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+        run: npm install
 
       - name: Build aplicación
         run: npm run build
