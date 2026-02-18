@@ -16,7 +16,7 @@ terraform {
     # Los valores se pasan con -backend-config en los workflows
     # bucket         = "foodoffice-terraform-state"
     # key            = "environments/dev/terraform.tfstate"
-    # region         = "us-east-1"
+    # region         = "us-east-2"
     # dynamodb_table = "terraform-state-lock"
     # encrypt        = true
   }
