@@ -44,7 +44,13 @@ jobs:
 
       - name: Terraform Init
         working-directory: ./terraform
-        run: terraform init
+        run: |
+          terraform init \
+            -backend-config="bucket=foodoffice-terraform-state" \
+            -backend-config="key=environments/dev/terraform.tfstate" \
+            -backend-config="region=us-east-1" \
+            -backend-config="dynamodb_table=terraform-state-lock" \
+            -backend-config="encrypt=true"
 
       - name: Terraform Plan
         working-directory: ./terraform
