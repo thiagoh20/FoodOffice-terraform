@@ -42,6 +42,7 @@ jobs:
         with:
           node-version: '20.x'
           cache: 'pnpm'
+          cache-dependency-path: 'pnpm-lock.yaml'
 
       - name: Instalar dependencias
         run: pnpm install --frozen-lockfile
@@ -151,6 +152,7 @@ jobs:
         with:
           node-version: '20.x'
           cache: 'pnpm'
+          cache-dependency-path: 'pnpm-lock.yaml'
 
       - name: Instalar dependencias
         run: pnpm install --frozen-lockfile
@@ -255,6 +257,7 @@ jobs:
         with:
           node-version: '20.x'
           cache: 'pnpm'
+          cache-dependency-path: 'pnpm-lock.yaml'
 
       - name: Instalar dependencias
         run: pnpm install --frozen-lockfile
