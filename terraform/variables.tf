@@ -44,3 +44,21 @@ variable "github_repository" {
   description = "Repositorio de GitHub en formato 'owner/repo' (ej: 'usuario/foodoffice')"
   type        = string
 }
+
+variable "certificate_arn" {
+  description = "ARN del certificado SSL en ACM (debe estar en us-east-1). Opcional, si no se proporciona se usa el certificado por defecto de CloudFront"
+  type        = string
+  default     = ""
+}
+
+variable "base_domain" {
+  description = "Dominio base para el sitio. Opcional, se usa solo si se necesita construir un dominio personalizado"
+  type        = string
+  default     = ""
+}
+
+variable "oidc_provider_arn" {
+  description = "ARN del proveedor OIDC de GitHub Actions en AWS IAM"
+  type        = string
+  default     = ""
+}
