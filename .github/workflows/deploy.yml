@@ -57,6 +57,11 @@ jobs:
         run: |
           git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.4
+
       - name: Obtener outputs de Terraform
         id: terraform-outputs
         working-directory: ./terraform
@@ -137,6 +142,11 @@ jobs:
         run: |
           git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.4
+
       - name: Obtener outputs de Terraform
         id: terraform-outputs
         working-directory: ./terraform
@@ -207,6 +217,11 @@ jobs:
       - name: Configure Git credentials for private modules
         run: |
           git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.4
 
       - name: Obtener outputs de Terraform
         id: terraform-outputs
