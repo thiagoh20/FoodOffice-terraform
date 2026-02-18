@@ -53,6 +53,48 @@ jobs:
             -backend-config="dynamodb_table=terraform-state-lock" \
             -backend-config="encrypt=true"
 
+      - name: Limpiar OAC huérfano si existe
+        working-directory: ./terraform
+        run: |
+          # Buscar OACs que puedan estar huérfanos (no asociados a distribuciones activas)
+          echo "Buscando OACs huérfanos..."
+          
+          # Listar todos los OACs
+          OAC_LIST=$(aws cloudfront list-origin-access-controls --output json 2>/dev/null || echo '{"OriginAccessControlList":{"Items":[]}}')
+          
+          # Buscar OACs que contengan "foodoffice-frontend" y "dev"
+          echo "$OAC_LIST" | python3 -c "
+          import json, sys, subprocess
+          data = json.load(sys.stdin)
+          oacs = data.get('OriginAccessControlList', {}).get('Items', [])
+          
+          for oac in oacs:
+              name = oac.get('Name', '')
+              oac_id = oac.get('Id', '')
+              
+              if 'foodoffice-frontend' in name and 'dev' in name:
+                  print(f'Encontrado OAC: {name} (ID: {oac_id})')
+                  
+                  # Verificar si está en uso
+                  result = subprocess.run(
+                      ['aws', 'cloudfront', 'list-distributions', '--query', 
+                       f\"DistributionList.Items[?Origins.Items[?OriginAccessControlId=='{oac_id}']].Id\", 
+                       '--output', 'text'],
+                      capture_output=True, text=True
+                  )
+                  
+                  dist_ids = result.stdout.strip()
+                  
+                  if not dist_ids or dist_ids == 'None':
+                      print(f'OAC {oac_id} no está en uso, eliminándolo...')
+                      subprocess.run(['aws', 'cloudfront', 'delete-origin-access-control', '--id', oac_id], 
+                                   capture_output=True)
+                      print(f'OAC {oac_id} eliminado')
+                  else:
+                      print(f'OAC {oac_id} está en uso por: {dist_ids}')
+          " || echo "No se encontraron OACs huérfanos o error al procesar"
+        continue-on-error: true
+
       - name: Terraform Plan
         working-directory: ./terraform
         run: terraform plan -out=tfplan
