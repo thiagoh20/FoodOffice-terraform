@@ -53,6 +53,48 @@ jobs:
             -backend-config="dynamodb_table=terraform-state-lock" \
             -backend-config="encrypt=true"
 
+      - name: Limpiar OAC huérfano si existe
+        working-directory: ./terraform
+        run: |
+          # Buscar OACs que puedan estar huérfanos (no asociados a distribuciones activas)
+          echo "Buscando OACs huérfanos..."
+          
+          # Listar todos los OACs
+          OAC_LIST=$(aws cloudfront list-origin-access-controls --output json 2>/dev/null || echo '{"OriginAccessControlList":{"Items":[]}}')
+          
+          # Buscar OACs que contengan "foodoffice-frontend" y "dev"
+          echo "$OAC_LIST" | python3 -c "
+          import json, sys, subprocess
+          data = json.load(sys.stdin)
+          oacs = data.get('OriginAccessControlList', {}).get('Items', [])
+          
+          for oac in oacs:
+              name = oac.get('Name', '')
+              oac_id = oac.get('Id', '')
+              
+              if 'foodoffice-frontend' in name and 'dev' in name:
+                  print(f'Encontrado OAC: {name} (ID: {oac_id})')
+                  
+                  # Verificar si está en uso
+                  result = subprocess.run(
+                      ['aws', 'cloudfront', 'list-distributions', '--query', 
+                       f\"DistributionList.Items[?Origins.Items[?OriginAccessControlId=='{oac_id}']].Id\", 
+                       '--output', 'text'],
+                      capture_output=True, text=True
+                  )
+                  
+                  dist_ids = result.stdout.strip()
+                  
+                  if not dist_ids or dist_ids == 'None':
+                      print(f'OAC {oac_id} no está en uso, eliminándolo...')
+                      subprocess.run(['aws', 'cloudfront', 'delete-origin-access-control', '--id', oac_id], 
+                                   capture_output=True)
+                      print(f'OAC {oac_id} eliminado')
+                  else:
+                      print(f'OAC {oac_id} está en uso por: {dist_ids}')
+          " || echo "No se encontraron OACs huérfanos o error al procesar"
+        continue-on-error: true
+
       - name: Terraform Plan
         working-directory: ./terraform
         run: terraform plan -out=tfplan
@@ -106,6 +148,67 @@ jobs:
             -backend-config="region=us-east-2" \
             -backend-config="dynamodb_table=terraform-state-lock" \
             -backend-config="encrypt=true"
+
+      - name: Obtener nombre del bucket S3
+        id: get-bucket
+        working-directory: ./terraform
+        run: |
+          BUCKET_NAME=$(terraform output -raw s3_bucket_name 2>/dev/null || echo "")
+          if [ -n "$BUCKET_NAME" ]; then
+            echo "bucket=$BUCKET_NAME" >> $GITHUB_OUTPUT
+            echo "Bucket encontrado: $BUCKET_NAME"
+          else
+            echo "No se encontró bucket en el estado de Terraform"
+            echo "bucket=" >> $GITHUB_OUTPUT
+          fi
+        env:
+          TF_VAR_environment: dev
+          TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
+          TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
+          TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
+
+      - name: Vaciar bucket S3 antes de destroy
+        if: steps.get-bucket.outputs.bucket != ''
+        run: |
+          BUCKET_NAME="${{ steps.get-bucket.outputs.bucket }}"
+          echo "Vaciando bucket: $BUCKET_NAME"
+          
+          # Eliminar todos los objetos primero
+          aws s3 rm s3://$BUCKET_NAME/ --recursive || echo "No hay objetos para eliminar"
+          
+          # Eliminar todas las versiones y delete markers
+          # El bucket tiene versionado habilitado, necesitamos eliminar todas las versiones
+          while true; do
+            # Obtener versiones y delete markers
+            VERSIONS=$(aws s3api list-object-versions --bucket $BUCKET_NAME \
+              --query '{Objects: Versions[].{Key:Key,VersionId:VersionId}, DeleteMarkers: DeleteMarkers[].{Key:Key,VersionId:VersionId}}' \
+              --output json 2>/dev/null || echo '{"Objects":[],"DeleteMarkers":[]}')
+            
+            # Combinar versiones y delete markers
+            ALL_OBJECTS=$(echo $VERSIONS | python3 -c "
+            import json, sys
+            data = json.load(sys.stdin)
+            objects = []
+            if data.get('Objects'):
+                objects.extend(data['Objects'])
+            if data.get('DeleteMarkers'):
+                objects.extend(data['DeleteMarkers'])
+            if objects:
+                print(json.dumps({'Objects': objects}))
+            else:
+                print('{\"Objects\":[]}')
+            ")
+            
+            if [ "$ALL_OBJECTS" != '{"Objects":[]}' ] && [ -n "$ALL_OBJECTS" ]; then
+              echo "$ALL_OBJECTS" > /tmp/delete.json
+              aws s3api delete-objects --bucket $BUCKET_NAME --delete file:///tmp/delete.json || break
+              echo "Eliminando versiones..."
+            else
+              break
+            fi
+          done
+          
+          echo "Bucket vaciado exitosamente"
 
       - name: Terraform Destroy
         working-directory: ./terraform
