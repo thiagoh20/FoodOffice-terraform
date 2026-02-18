@@ -53,46 +53,30 @@ jobs:
             -backend-config="dynamodb_table=terraform-state-lock" \
             -backend-config="encrypt=true"
 
-      - name: Limpiar OAC huérfano si existe
+      - name: Importar OAC existente si es necesario
         working-directory: ./terraform
         run: |
-          # Buscar OACs que puedan estar huérfanos (no asociados a distribuciones activas)
-          echo "Buscando OACs huérfanos..."
+          # Buscar OAC existente con el patrón foodoffice-frontend-*-dev-oac
+          OAC_ID=$(aws cloudfront list-origin-access-controls \
+            --query "OriginAccessControlList.Items[?contains(Name, 'foodoffice-frontend') && contains(Name, 'dev-oac')].Id" \
+            --output text 2>/dev/null | head -1 || echo "")
           
-          # Listar todos los OACs
-          OAC_LIST=$(aws cloudfront list-origin-access-controls --output json 2>/dev/null || echo '{"OriginAccessControlList":{"Items":[]}}')
-          
-          # Buscar OACs que contengan "foodoffice-frontend" y "dev"
-          echo "$OAC_LIST" | python3 -c "
-          import json, sys, subprocess
-          data = json.load(sys.stdin)
-          oacs = data.get('OriginAccessControlList', {}).get('Items', [])
-          
-          for oac in oacs:
-              name = oac.get('Name', '')
-              oac_id = oac.get('Id', '')
-              
-              if 'foodoffice-frontend' in name and 'dev' in name:
-                  print(f'Encontrado OAC: {name} (ID: {oac_id})')
-                  
-                  # Verificar si está en uso
-                  result = subprocess.run(
-                      ['aws', 'cloudfront', 'list-distributions', '--query', 
-                       f\"DistributionList.Items[?Origins.Items[?OriginAccessControlId=='{oac_id}']].Id\", 
-                       '--output', 'text'],
-                      capture_output=True, text=True
-                  )
-                  
-                  dist_ids = result.stdout.strip()
-                  
-                  if not dist_ids or dist_ids == 'None':
-                      print(f'OAC {oac_id} no está en uso, eliminándolo...')
-                      subprocess.run(['aws', 'cloudfront', 'delete-origin-access-control', '--id', oac_id], 
-                                   capture_output=True)
-                      print(f'OAC {oac_id} eliminado')
-                  else:
-                      print(f'OAC {oac_id} está en uso por: {dist_ids}')
-          " || echo "No se encontraron OACs huérfanos o error al procesar"
+          if [ -n "$OAC_ID" ] && [ "$OAC_ID" != "None" ] && [ "$OAC_ID" != "" ]; then
+            echo "OAC existente encontrado: $OAC_ID"
+            echo "Intentando importar al estado de Terraform..."
+            
+            # Intentar importar el OAC
+            terraform import "module.foodoffice_frontend_cloudfront.aws_cloudfront_origin_access_control.s3_oac" "$OAC_ID" 2>&1 || {
+              echo "No se pudo importar (puede que ya esté en el estado o el módulo no esté inicializado)"
+            }
+          else
+            echo "No se encontró OAC existente, se creará uno nuevo"
+          fi
+        env:
+          TF_VAR_environment: dev
+          TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
+          TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
+          TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
         continue-on-error: true
 
       - name: Terraform Plan
