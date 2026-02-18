@@ -1,6 +1,6 @@
 # foodoffice Frontend
 module "foodoffice_frontend_bucket_name" {
-  source      = "git@github.com:thiagoh20/terraform-modules.git//s3?ref=main"
+  source      = "git::https://github.com/thiagoh20/terraform-modules.git//s3?ref=main"
   bucket_name = "foodoffice-frontend"
 
   tags = merge(var.tags, {
@@ -12,7 +12,7 @@ module "foodoffice_frontend_bucket_name" {
 }
 
 module "foodoffice_frontend_cloudfront" {
-  source = "git@github.com:thiagoh20/terraform-modules.git//cloudfront?ref=main"
+  source = "git::https://github.com/thiagoh20/terraform-modules.git//cloudfront?ref=main"
 
   domain_name    = module.foodoffice_frontend_bucket_name.bucket_regional_domain_name
   bucket_id      = module.foodoffice_frontend_bucket_name.bucket_id

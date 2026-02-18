@@ -52,6 +52,10 @@ jobs:
         with:
           terraform_version: 1.13.4
 
+      - name: Configure Git credentials for private modules
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
       - name: Terraform Init
         working-directory: ./terraform
         run: terraform init
