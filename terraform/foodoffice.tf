@@ -50,3 +50,24 @@ resource "aws_s3_bucket_policy" "frontend_cloudfront" {
     ]
   })
 }
+
+# Módulo IAM OIDC para GitHub Actions
+module "iam_oidc" {
+  count = var.oidc_provider_arn != "" ? 1 : 0
+  
+  source = "git::https://github.com/thiagoh20/terraform-modules.git//iam-oidc?ref=main"
+
+  github_repository = var.github_repository
+  oidc_provider_arn = var.oidc_provider_arn
+  environment       = var.environment
+  bucket_arn        = module.foodoffice_frontend_bucket_name.bucket_arn
+  distribution_arn  = module.foodoffice_frontend_cloudfront.distribution_arn
+  role_name         = "github-actions-${replace(var.github_repository, "/", "-")}-${var.environment}"
+
+  tags = merge(var.tags, {
+    Name        = "github-actions-role"
+    Project     = "foodoffice"
+    Environment = var.environment
+    Owner       = "infrastructure"
+  })
+}

@@ -56,3 +56,9 @@ variable "base_domain" {
   type        = string
   default     = ""
 }
+
+variable "oidc_provider_arn" {
+  description = "ARN del proveedor OIDC de GitHub Actions en AWS IAM"
+  type        = string
+  default     = ""
+}
