@@ -29,16 +29,6 @@ jobs:
 
       - name: Build aplicación
         run: npm run build
-
-      # Ejemplo: Deploy a Vercel
-      # - name: Deploy a Vercel
-      #   uses: amondnet/vercel-action@v25
-      #   with:
-      #     vercel-token: ${{ secrets.VERCEL_TOKEN }}
-      #     vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-      #     vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-      #     vercel-args: '--prod'
-
       # Ejemplo: Deploy con Terraform
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
