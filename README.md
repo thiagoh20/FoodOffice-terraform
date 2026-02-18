@@ -1,73 +1,69 @@
-# React + TypeScript + Vite
+# FoodOffice Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Frontend React para el sistema de gestión de pedidos de oficina.
 
-Currently, two official plugins are available:
+## Requisitos
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Node.js 20.x
+- pnpm 10.4.1+
 
-## React Compiler
+## Instalación
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+pnpm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Configuración
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Crea un archivo `.env` en la raíz del proyecto frontend con las siguientes variables:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```env
+# URL del backend API
+VITE_API_URL=http://localhost:3000
+
+# OAuth (opcional)
+VITE_OAUTH_PORTAL_URL=https://tu-servidor-oauth.com
+VITE_APP_ID=tu-app-id
+
+# Google Maps (opcional)
+VITE_FRONTEND_FORGE_API_KEY=tu-api-key
+VITE_FRONTEND_FORGE_API_URL=https://forge.butterfly-effect.dev
 ```
+
+## Scripts
+
+- `pnpm dev` - Inicia el servidor de desarrollo en `http://localhost:5173`
+- `pnpm build` - Construye el proyecto para producción
+- `pnpm preview` - Previsualiza la build de producción
+- `pnpm check` - Verifica tipos TypeScript
+- `pnpm format` - Formatea el código con Prettier
+
+## Desarrollo
+
+```bash
+pnpm dev
+```
+
+El frontend se iniciará en `http://localhost:5173` y se conectará automáticamente al backend configurado en `VITE_API_URL`.
+
+## Estructura
+
+- `src/` - Código fuente de la aplicación
+- `src/components/` - Componentes React
+- `src/pages/` - Páginas de la aplicación
+- `src/lib/` - Utilidades y configuraciones
+- `shared/` - Código compartido con el backend
+
+## Despliegue
+
+### Build de producción
+
+```bash
+pnpm build
+```
+
+Los archivos estáticos se generarán en la carpeta `dist/`.
+
+### Vercel / Netlify
+
+El proyecto puede desplegarse directamente en Vercel o Netlify. Asegúrate de configurar las variables de entorno en la plataforma de despliegue.
