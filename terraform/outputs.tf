@@ -10,12 +10,12 @@ output "project_name" {
 
 output "github_actions_role_arn" {
   description = "ARN del rol de IAM para GitHub Actions (OIDC)"
-  value       = try(module.iam_oidc[0].role_arn, null)
+  value       = module.iam_oidc.role_arn
 }
 
 output "github_actions_role_name" {
   description = "Nombre del rol de IAM para GitHub Actions"
-  value       = try(module.iam_oidc[0].role_name, null)
+  value       = module.iam_oidc.role_name
 }
 
 output "cloudfront_distribution_id" {
