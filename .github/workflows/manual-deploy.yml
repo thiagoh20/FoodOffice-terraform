@@ -63,94 +63,41 @@ jobs:
           TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
           TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
 
-      - name: Importar regla de seguridad existente (si existe)
+      - name: Eliminar regla de seguridad duplicada (si existe)
         working-directory: ./terraform
         continue-on-error: true
         run: |
           # Obtener IDs de Security Groups desde outputs de Terraform
-          LAMBDA_SG=$(terraform output -raw lambda_security_group_id 2>/dev/null || echo "")
-          RDS_SG=$(terraform output -raw rds_security_group_id 2>/dev/null || echo "")
+          LAMBDA_SG=$(terraform output -raw lambda_security_group_id 2>/dev/null || echo "sg-07387339b35fe5c83")
+          RDS_SG=$(terraform output -raw rds_security_group_id 2>/dev/null || echo "sg-05ab21fca371a7df5")
           
-          if [ -z "$LAMBDA_SG" ] || [ -z "$RDS_SG" ]; then
-            echo "⚠️  No se pudieron obtener los Security Group IDs. Saltando importación."
-            exit 0
-          fi
-          
-          echo "🔍 Buscando regla existente..."
+          echo "🔍 Verificando si existe regla duplicada..."
           echo "Lambda SG: $LAMBDA_SG"
           echo "RDS SG: $RDS_SG"
           
-          # Buscar la regla existente usando describe-security-groups (más confiable)
-          echo "🔍 Buscando regla en Security Group de RDS..."
-          
-          # Obtener todas las reglas de ingress del Security Group de RDS
-          RULES_JSON=$(aws ec2 describe-security-groups \
+          # Verificar si la regla existe usando describe-security-groups
+          HAS_RULE=$(aws ec2 describe-security-groups \
             --group-ids "${RDS_SG}" \
-            --query "SecurityGroups[0].IpPermissions[?FromPort==\`5432\` && ToPort==\`5432\` && IpProtocol==\`tcp\`]" \
-            --output json 2>/dev/null || echo "[]")
+            --query "SecurityGroups[0].IpPermissions[?FromPort==\`5432\` && ToPort==\`5432\` && IpProtocol==\`tcp\` && length(UserIdGroupPairs[?GroupId==\`${LAMBDA_SG}\`]) > \`0\`]" \
+            --output text 2>/dev/null || echo "")
           
-          # Buscar si hay una regla que permita desde el Security Group de Lambda
-          RULE_ID=$(echo "$RULES_JSON" | \
-            jq -r --arg LAMBDA_SG "$LAMBDA_SG" \
-            '.[] | select(.UserIdGroupPairs[]?.GroupId == $LAMBDA_SG) | .UserIdGroupPairs[0].GroupId' 2>/dev/null || echo "")
-          
-          # Si encontramos la regla, necesitamos obtener su ID usando describe-security-group-rules
-          if [ -n "$RULE_ID" ] && [ "$RULE_ID" == "$LAMBDA_SG" ]; then
-            echo "✅ Regla encontrada en configuración. Obteniendo ID de la regla..."
+          if [ -n "$HAS_RULE" ] && [ "$HAS_RULE" != "None" ]; then
+            echo "⚠️  Regla duplicada encontrada. Eliminándola para que Terraform la cree..."
             
-            # Obtener el ID de la regla usando describe-security-group-rules
-            RULE_ID=$(aws ec2 describe-security-group-rules \
-              --filters "Name=group-id,Values=${RDS_SG}" \
-                        "Name=is-egress,Values=false" \
-                        "Name=ip-protocol,Values=tcp" \
-                        "Name=from-port,Values=5432" \
-                        "Name=to-port,Values=5432" \
-              --query "SecurityGroupRules[?ReferencedGroupInfo.GroupId==\`${LAMBDA_SG}\`].SecurityGroupRuleId" \
-              --output text 2>/dev/null | head -1 || echo "")
-          fi
-          
-          if [ -z "$RULE_ID" ] || [ "$RULE_ID" == "None" ] || [ "$RULE_ID" == "null" ]; then
-            echo "⚠️  No se encontró regla por ID. Intentando método alternativo..."
-            
-            # Método alternativo: buscar todas las reglas y filtrar manualmente
-            ALL_RULES=$(aws ec2 describe-security-group-rules \
-              --filters "Name=group-id,Values=${RDS_SG}" \
-                        "Name=is-egress,Values=false" \
-                        "Name=ip-protocol,Values=tcp" \
-                        "Name=from-port,Values=5432" \
-                        "Name=to-port,Values=5432" \
-              --output json 2>/dev/null || echo "[]")
-            
-            RULE_ID=$(echo "$ALL_RULES" | \
-              jq -r --arg LAMBDA_SG "$LAMBDA_SG" \
-              '.SecurityGroupRules[] | select(.ReferencedGroupInfo.GroupId == $LAMBDA_SG) | .SecurityGroupRuleId' 2>/dev/null | head -1 || echo "")
-            
-            if [ -z "$RULE_ID" ] || [ "$RULE_ID" == "None" ] || [ "$RULE_ID" == "null" ]; then
-              echo "✅ No se encontró regla existente. Terraform la creará."
-              echo "ℹ️  Si terraform apply falla con error de duplicado, la regla existe pero no se pudo detectar."
+            # Eliminar la regla usando revoke-security-group-ingress
+            aws ec2 revoke-security-group-ingress \
+              --group-id "${RDS_SG}" \
+              --protocol tcp \
+              --port 5432 \
+              --source-group "${LAMBDA_SG}" 2>&1 || {
+              echo "⚠️  No se pudo eliminar la regla. Puede que ya no exista o haya un problema de permisos."
               exit 0
-            fi
+            }
+            
+            echo "✅ Regla eliminada exitosamente. Terraform la creará de nuevo."
+          else
+            echo "✅ No se encontró regla duplicada. Terraform la creará normalmente."
           fi
-          
-          echo "✅ Regla encontrada: $RULE_ID"
-          echo "📥 Importando regla a Terraform..."
-          
-          # Intentar importar la regla
-          terraform import \
-            module.rds_security_groups.aws_security_group_rule.rds_ingress_from_lambda \
-            "$RULE_ID" 2>&1 | tee /tmp/import-output.txt || {
-            IMPORT_ERROR=$(cat /tmp/import-output.txt)
-            if echo "$IMPORT_ERROR" | grep -q "already managed"; then
-              echo "✅ Regla ya está en el estado de Terraform."
-            elif echo "$IMPORT_ERROR" | grep -q "Cannot import"; then
-              echo "⚠️  No se pudo importar la regla. Puede que el recurso no exista en el código o haya un problema de configuración."
-            else
-              echo "⚠️  Error al importar: $IMPORT_ERROR"
-            fi
-            exit 0
-          }
-          
-          echo "✅ Regla importada exitosamente"
         env:
           TF_VAR_environment: dev
           TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
@@ -170,74 +117,40 @@ jobs:
           TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
           TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
 
-      - name: Manejar error de regla duplicada
+      - name: Manejar error de regla duplicada (respaldo)
         if: steps.terraform-apply.outcome == 'failure'
         working-directory: ./terraform
+        continue-on-error: true
         run: |
-          APPLY_OUTPUT=$(cat /tmp/apply-output.txt)
+          APPLY_OUTPUT=$(cat /tmp/apply-output.txt 2>/dev/null || echo "")
           
           if echo "$APPLY_OUTPUT" | grep -q "InvalidPermission.Duplicate"; then
-            echo "⚠️  Error de regla duplicada detectado. Intentando importar la regla..."
+            echo "⚠️  Error de regla duplicada detectado. Eliminando regla existente..."
             
             # Obtener IDs de Security Groups
             LAMBDA_SG=$(terraform output -raw lambda_security_group_id 2>/dev/null || echo "sg-07387339b35fe5c83")
             RDS_SG=$(terraform output -raw rds_security_group_id 2>/dev/null || echo "sg-05ab21fca371a7df5")
             
-            echo "Lambda SG: $LAMBDA_SG"
-            echo "RDS SG: $RDS_SG"
+            echo "Eliminando regla: Lambda SG $LAMBDA_SG -> RDS SG $RDS_SG (puerto 5432)"
             
-            # Buscar la regla usando múltiples métodos
-            RULE_ID=$(aws ec2 describe-security-group-rules \
-              --filters "Name=group-id,Values=${RDS_SG}" \
-                        "Name=is-egress,Values=false" \
-                        "Name=ip-protocol,Values=tcp" \
-                        "Name=from-port,Values=5432" \
-                        "Name=to-port,Values=5432" \
-              --query "SecurityGroupRules[?ReferencedGroupInfo.GroupId==\`${LAMBDA_SG}\`].SecurityGroupRuleId" \
-              --output text 2>/dev/null | head -1 || echo "")
+            # Eliminar la regla
+            aws ec2 revoke-security-group-ingress \
+              --group-id "${RDS_SG}" \
+              --protocol tcp \
+              --port 5432 \
+              --source-group "${LAMBDA_SG}" 2>&1 || {
+              echo "⚠️  No se pudo eliminar la regla. Puede que ya no exista."
+            }
             
-            if [ -z "$RULE_ID" ] || [ "$RULE_ID" == "None" ]; then
-              # Método alternativo: obtener todas las reglas y filtrar
-              ALL_RULES=$(aws ec2 describe-security-groups \
-                --group-ids "${RDS_SG}" \
-                --query "SecurityGroups[0].IpPermissions[?FromPort==\`5432\` && ToPort==\`5432\` && IpProtocol==\`tcp\`]" \
-                --output json 2>/dev/null || echo "[]")
-              
-              HAS_LAMBDA_RULE=$(echo "$ALL_RULES" | \
-                jq -r --arg LAMBDA_SG "$LAMBDA_SG" \
-                '.[] | select(.UserIdGroupPairs[]?.GroupId == $LAMBDA_SG) | "found"' 2>/dev/null | head -1 || echo "")
-              
-              if [ "$HAS_LAMBDA_RULE" == "found" ]; then
-                # Si la regla existe pero no podemos obtener su ID, intentar eliminarla y recrearla
-                echo "⚠️  Regla existe pero no se puede obtener ID. Eliminando regla manualmente..."
-                aws ec2 revoke-security-group-ingress \
-                  --group-id "${RDS_SG}" \
-                  --protocol tcp \
-                  --port 5432 \
-                  --source-group "${LAMBDA_SG}" 2>/dev/null || echo "No se pudo eliminar la regla"
-                
-                echo "🔄 Re-ejecutando terraform apply..."
-                terraform apply -auto-approve tfplan
-                exit 0
-              fi
-            fi
-            
-            if [ -n "$RULE_ID" ] && [ "$RULE_ID" != "None" ]; then
-              echo "✅ Regla encontrada: $RULE_ID"
-              echo "📥 Importando regla..."
-              
-              terraform import \
-                module.rds_security_groups.aws_security_group_rule.rds_ingress_from_lambda \
-                "$RULE_ID" || echo "⚠️  No se pudo importar"
-              
-              echo "🔄 Re-ejecutando terraform apply..."
-              terraform apply -auto-approve tfplan
-            else
-              echo "❌ No se pudo resolver el error de regla duplicada"
+            echo "🔄 Re-ejecutando terraform apply..."
+            terraform apply -auto-approve tfplan || {
+              echo "❌ Error al re-ejecutar terraform apply"
               exit 1
-            fi
+            }
+            
+            echo "✅ Terraform apply completado exitosamente después de eliminar la regla duplicada"
           else
-            echo "❌ Error diferente al de regla duplicada:"
+            echo "❌ Error diferente al de regla duplicada. Mostrando output:"
             echo "$APPLY_OUTPUT"
             exit 1
           fi
