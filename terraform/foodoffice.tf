@@ -72,18 +72,33 @@ module "iam_oidc" {
   })
 }
 
-# Data source para obtener la VPC por defecto
-data "aws_vpc" "default" {
-  default = true
+# Módulo de VPC - Crea la VPC con subnets públicas y privadas
+module "vpc" {
+  source = "git::https://github.com/thiagoh20/terraform-modules.git//vpc?ref=main"
+
+  project_name = var.project_name
+  environment  = var.environment
+
+  vpc_cidr            = var.vpc_cidr
+  public_subnet_cidrs = var.public_subnet_cidrs
+  private_subnet_cidrs = var.private_subnet_cidrs
+  enable_nat_gateway  = var.enable_nat_gateway
+
+  tags = merge(var.tags, {
+    Name        = "foodoffice-vpc"
+    Project     = "foodoffice"
+    Environment = var.environment
+    Owner       = "infrastructure"
+  })
 }
 
 # Módulo de Security Groups para RDS y Lambda
 module "rds_security_groups" {
   source = "git::https://github.com/thiagoh20/terraform-modules.git//security-groups?ref=main"
 
-  project_name     = var.project_name
-  environment      = var.environment
-  vpc_id           = data.aws_vpc.default.id
+  project_name      = var.project_name
+  environment       = var.environment
+  vpc_id            = module.vpc.vpc_id
   admin_cidr_blocks = var.admin_cidr_blocks
 
   tags = merge(var.tags, {
@@ -101,6 +116,7 @@ module "rds" {
   project_name         = var.project_name
   environment          = var.environment
   rds_security_group_id = module.rds_security_groups.rds_security_group_id
+  subnet_ids           = module.vpc.private_subnet_ids
 
   db_name     = var.db_name
   db_username = var.db_username

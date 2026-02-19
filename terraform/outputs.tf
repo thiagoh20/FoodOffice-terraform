@@ -80,14 +80,30 @@ output "rds_security_group_id" {
   value       = module.rds_security_groups.rds_security_group_id
 }
 
+# Outputs de VPC
 output "vpc_id" {
   description = "ID de la VPC"
-  value       = module.rds.vpc_id
+  value       = module.vpc.vpc_id
+}
+
+output "vpc_cidr_block" {
+  description = "CIDR block de la VPC"
+  value       = module.vpc.vpc_cidr_block
+}
+
+output "public_subnet_ids" {
+  description = "IDs de las subnets públicas"
+  value       = module.vpc.public_subnet_ids
+}
+
+output "private_subnet_ids" {
+  description = "IDs de las subnets privadas (para RDS)"
+  value       = module.vpc.private_subnet_ids
 }
 
 output "subnet_ids" {
-  description = "IDs de las subnets para Lambda"
-  value       = module.rds.subnet_ids
+  description = "IDs de las subnets privadas para Lambda/RDS (alias de private_subnet_ids)"
+  value       = module.vpc.private_subnet_ids
 }
 
 output "database_url" {

@@ -8,6 +8,10 @@ on:
 env:
   ENVIRONMENT: dev
 
+concurrency:
+  group: terraform-${{ github.ref_name }}-${{ env.ENVIRONMENT }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy a Desarrollo

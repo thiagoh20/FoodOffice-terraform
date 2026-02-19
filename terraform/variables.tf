@@ -141,3 +141,28 @@ variable "admin_cidr_blocks" {
   type        = list(string)
   default     = []
 }
+
+# Variables para el módulo VPC
+variable "vpc_cidr" {
+  description = "CIDR block para la VPC"
+  type        = string
+  default     = "10.0.0.0/16"
+}
+
+variable "public_subnet_cidrs" {
+  description = "Lista de bloques CIDR para subnets públicas"
+  type        = list(string)
+  default     = ["10.0.1.0/24", "10.0.2.0/24"]
+}
+
+variable "private_subnet_cidrs" {
+  description = "Lista de bloques CIDR para subnets privadas (para RDS)"
+  type        = list(string)
+  default     = ["10.0.10.0/24", "10.0.20.0/24"]
+}
+
+variable "enable_nat_gateway" {
+  description = "Habilitar NAT Gateway para subnets privadas (tiene costos, deshabilitado para Free Tier)"
+  type        = bool
+  default     = false
+}
