@@ -72,17 +72,19 @@ module "iam_oidc" {
   })
 }
 
-# Módulo de VPC - Crea la VPC con subnets públicas y privadas
+# Módulo de VPC - Arquitectura de 3 capas
 module "vpc" {
   source = "git::https://github.com/thiagoh20/terraform-modules.git//vpc?ref=main"
 
   project_name = var.project_name
   environment  = var.environment
 
-  vpc_cidr            = var.vpc_cidr
-  public_subnet_cidrs = var.public_subnet_cidrs
-  private_subnet_cidrs = var.private_subnet_cidrs
-  enable_nat_gateway  = var.enable_nat_gateway
+  vpc_cidr                = var.vpc_cidr
+  public_subnet_cidrs     = var.public_subnet_cidrs
+  private_app_subnet_cidrs = var.private_app_subnet_cidrs
+  private_data_subnet_cidrs = var.private_data_subnet_cidrs
+  enable_nat_instance     = var.enable_nat_instance
+  nat_instance_type       = var.nat_instance_type
 
   tags = merge(var.tags, {
     Name        = "foodoffice-vpc"
@@ -116,7 +118,7 @@ module "rds" {
   project_name         = var.project_name
   environment          = var.environment
   rds_security_group_id = module.rds_security_groups.rds_security_group_id
-  subnet_ids           = module.vpc.private_subnet_ids
+  subnet_ids           = module.vpc.private_data_subnet_ids  # RDS en Data Layer
 
   db_name     = var.db_name
   db_username = var.db_username

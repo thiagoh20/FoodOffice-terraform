@@ -155,14 +155,26 @@ variable "public_subnet_cidrs" {
   default     = ["10.0.1.0/24", "10.0.2.0/24"]
 }
 
-variable "private_subnet_cidrs" {
-  description = "Lista de bloques CIDR para subnets privadas (para RDS)"
+variable "private_app_subnet_cidrs" {
+  description = "Lista de bloques CIDR para subnets privadas de aplicación (Lambda, ECS, etc.)"
   type        = list(string)
   default     = ["10.0.10.0/24", "10.0.20.0/24"]
 }
 
-variable "enable_nat_gateway" {
-  description = "Habilitar NAT Gateway para subnets privadas (tiene costos, deshabilitado para Free Tier)"
+variable "private_data_subnet_cidrs" {
+  description = "Lista de bloques CIDR para subnets privadas de datos (RDS, ElastiCache, etc.)"
+  type        = list(string)
+  default     = ["10.0.100.0/24", "10.0.200.0/24"]
+}
+
+variable "enable_nat_instance" {
+  description = "Habilitar NAT Instance para subnets privadas (t2.micro - gratis en Free Tier)"
   type        = bool
-  default     = false
+  default     = true
+}
+
+variable "nat_instance_type" {
+  description = "Tipo de instancia para NAT Instance (t2.micro para Free Tier)"
+  type        = string
+  default     = "t2.micro"
 }

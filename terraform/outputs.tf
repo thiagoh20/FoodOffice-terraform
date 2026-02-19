@@ -75,6 +75,11 @@ output "lambda_security_group_id" {
   value       = module.rds_security_groups.lambda_security_group_id
 }
 
+output "lambda_subnet_ids" {
+  description = "IDs de las subnets privadas de aplicación para Lambda"
+  value       = module.vpc.private_app_subnet_ids
+}
+
 output "rds_security_group_id" {
   description = "ID del Security Group para RDS"
   value       = module.rds_security_groups.rds_security_group_id
@@ -96,14 +101,25 @@ output "public_subnet_ids" {
   value       = module.vpc.public_subnet_ids
 }
 
+output "private_app_subnet_ids" {
+  description = "IDs de las subnets privadas de aplicación (para Lambda, ECS, etc.)"
+  value       = module.vpc.private_app_subnet_ids
+}
+
+output "private_data_subnet_ids" {
+  description = "IDs de las subnets privadas de datos (para RDS, ElastiCache, etc.)"
+  value       = module.vpc.private_data_subnet_ids
+}
+
+# Alias para compatibilidad
 output "private_subnet_ids" {
-  description = "IDs de las subnets privadas (para RDS)"
-  value       = module.vpc.private_subnet_ids
+  description = "IDs de las subnets privadas de datos (alias de private_data_subnet_ids)"
+  value       = module.vpc.private_data_subnet_ids
 }
 
 output "subnet_ids" {
-  description = "IDs de las subnets privadas para Lambda/RDS (alias de private_subnet_ids)"
-  value       = module.vpc.private_subnet_ids
+  description = "IDs de las subnets privadas de datos para RDS (alias de private_data_subnet_ids)"
+  value       = module.vpc.private_data_subnet_ids
 }
 
 output "database_url" {
