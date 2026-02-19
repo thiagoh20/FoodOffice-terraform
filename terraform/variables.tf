@@ -91,7 +91,7 @@ variable "db_instance_class" {
 variable "db_engine_version" {
   description = "Versión del motor PostgreSQL"
   type        = string
-  default     = "16.1"
+  default     = "15.4"
 }
 
 variable "db_allocated_storage" {
