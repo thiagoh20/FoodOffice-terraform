@@ -70,14 +70,15 @@ output "rds_username" {
   sensitive   = false
 }
 
+# Outputs útiles para SAM (Lambda se gestiona en otro repositorio)
 output "lambda_security_group_id" {
-  description = "ID del Security Group para funciones Lambda"
+  description = "ID del Security Group para funciones Lambda (útil para SAM)"
   value       = module.rds_security_groups.lambda_security_group_id
 }
 
 output "lambda_subnet_ids" {
-  description = "IDs de las subnets públicas (dual-purpose) para Lambda"
-  value       = module.vpc.public_subnet_ids
+  description = "IDs de las subnets privadas de aplicación para Lambda (útil para SAM)"
+  value       = module.vpc.private_app_subnet_ids
 }
 
 output "rds_security_group_id" {
@@ -128,39 +129,39 @@ output "database_url" {
   sensitive   = true
 }
 
-# Outputs de Lambda
-output "lambda_function_name" {
-  description = "Nombre de la función Lambda"
-  value       = aws_lambda_function.main.function_name
-}
+# Outputs de Lambda - Comentados porque Lambda se gestiona con SAM en otro repositorio
+# output "lambda_function_name" {
+#   description = "Nombre de la función Lambda"
+#   value       = aws_lambda_function.main.function_name
+# }
 
-output "lambda_function_arn" {
-  description = "ARN de la función Lambda"
-  value       = aws_lambda_function.main.arn
-}
+# output "lambda_function_arn" {
+#   description = "ARN de la función Lambda"
+#   value       = aws_lambda_function.main.arn
+# }
 
-output "lambda_function_invoke_arn" {
-  description = "ARN de invocación de la función Lambda"
-  value       = aws_lambda_function.main.invoke_arn
-}
+# output "lambda_function_invoke_arn" {
+#   description = "ARN de invocación de la función Lambda"
+#   value       = aws_lambda_function.main.invoke_arn
+# }
 
-# Outputs de API Gateway
-output "api_gateway_id" {
-  description = "ID del API Gateway"
-  value       = aws_apigatewayv2_api.main.id
-}
+# Outputs de API Gateway - Comentados porque API Gateway se gestiona con SAM en otro repositorio
+# output "api_gateway_id" {
+#   description = "ID del API Gateway"
+#   value       = aws_apigatewayv2_api.main.id
+# }
 
-output "api_gateway_endpoint" {
-  description = "URL del endpoint del API Gateway"
-  value       = aws_apigatewayv2_api.main.api_endpoint
-}
+# output "api_gateway_endpoint" {
+#   description = "URL del endpoint del API Gateway"
+#   value       = aws_apigatewayv2_api.main.api_endpoint
+# }
 
-output "api_gateway_execution_arn" {
-  description = "ARN de ejecución del API Gateway"
-  value       = aws_apigatewayv2_api.main.execution_arn
-}
+# output "api_gateway_execution_arn" {
+#   description = "ARN de ejecución del API Gateway"
+#   value       = aws_apigatewayv2_api.main.execution_arn
+# }
 
-output "api_gateway_stage_invoke_url" {
-  description = "URL de invocación del stage del API Gateway"
-  value       = "${aws_apigatewayv2_api.main.api_endpoint}/${aws_apigatewayv2_stage.main.name}"
-}
+# output "api_gateway_stage_invoke_url" {
+#   description = "URL de invocación del stage del API Gateway"
+#   value       = "${aws_apigatewayv2_api.main.api_endpoint}/${aws_apigatewayv2_stage.main.name}"
+# }
