@@ -9,7 +9,7 @@ env:
   ENVIRONMENT: dev
 
 concurrency:
-  group: terraform-${{ github.ref_name }}-${{ env.ENVIRONMENT }}
+  group: terraform-${{ github.ref_name }}-dev
   cancel-in-progress: false
 
 jobs:
