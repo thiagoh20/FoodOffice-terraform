@@ -178,3 +178,28 @@ variable "nat_instance_type" {
   type        = string
   default     = "t2.micro"
 }
+
+# Variables para Lambda
+variable "lambda_handler" {
+  description = "Handler de la función Lambda"
+  type        = string
+  default     = "index.handler"
+}
+
+variable "lambda_runtime" {
+  description = "Runtime de la función Lambda"
+  type        = string
+  default     = "nodejs20.x"
+}
+
+variable "lambda_timeout" {
+  description = "Timeout de la función Lambda en segundos"
+  type        = number
+  default     = 30
+}
+
+variable "lambda_zip_file" {
+  description = "Ruta al archivo ZIP de Lambda (opcional, se puede usar código inline como placeholder)"
+  type        = string
+  default     = ""
+}
