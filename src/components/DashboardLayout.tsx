@@ -67,7 +67,14 @@ export default function DashboardLayout({
       setIsLoading(true);
       setError(null);
       try {
-        const response = await fetch('/api/dev/login', {
+        // En desarrollo, usa el proxy de Vite (URL relativa)
+        // En producción, usa la URL absoluta del backend
+        const isDevelopment = import.meta.env.DEV;
+        const loginUrl = isDevelopment 
+          ? "/api/dev/login"  // Usa el proxy de Vite en desarrollo
+          : `${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/dev/login`;
+        
+        const response = await fetch(loginUrl, {
           method: 'POST',
           credentials: 'include',
         });
@@ -76,8 +83,15 @@ export default function DashboardLayout({
           window.location.reload();
         } else {
           const errorMsg = data.error || data.details || 'Failed to login in development mode';
-          console.error('Failed to login:', errorMsg);
-          setError(errorMsg);
+          console.error('Failed to login:', errorMsg, 'Response status:', response.status, 'Full response:', data);
+          
+          // Mensaje más descriptivo si el error es sobre OAuth no configurado
+          let displayError = errorMsg;
+          if (errorMsg.includes('OAuth is not configured') || errorMsg.includes('OAUTH_SERVER_URL')) {
+            displayError = 'El backend requiere OAUTH_SERVER_URL configurado. Por favor, agrega OAUTH_SERVER_URL="" (vacío) al archivo .env del backend para habilitar el login de desarrollo.';
+          }
+          
+          setError(displayError);
           setIsLoading(false);
         }
       } catch (error) {

@@ -37,11 +37,17 @@ queryClient.getMutationCache().subscribe(event => {
   }
 });
 
-const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
+// En desarrollo, usa el proxy de Vite (URL relativa)
+// En producción, usa la URL absoluta del backend
+const isDevelopment = import.meta.env.DEV;
+const apiUrl = isDevelopment 
+  ? "/api/trpc"  // Usa el proxy de Vite en desarrollo
+  : (import.meta.env.VITE_API_URL || "http://localhost:3001") + "/api/trpc";
+
 const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({
-      url: `${apiUrl}/api/trpc`,
+      url: apiUrl,
       transformer: superjson,
       fetch(input, init) {
         return globalThis.fetch(input, {
