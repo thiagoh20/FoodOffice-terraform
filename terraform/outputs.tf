@@ -42,3 +42,56 @@ output "s3_bucket_arn" {
   description = "ARN del bucket S3"
   value       = module.foodoffice_frontend_bucket_name.bucket_arn
 }
+
+# Outputs de RDS
+output "rds_endpoint" {
+  description = "Endpoint de la instancia RDS"
+  value       = module.rds.rds_endpoint
+}
+
+output "rds_address" {
+  description = "Dirección (hostname) de la instancia RDS"
+  value       = module.rds.rds_address
+}
+
+output "rds_port" {
+  description = "Puerto de la instancia RDS"
+  value       = module.rds.rds_port
+}
+
+output "rds_database_name" {
+  description = "Nombre de la base de datos RDS"
+  value       = module.rds.rds_database_name
+}
+
+output "rds_username" {
+  description = "Usuario maestro de RDS"
+  value       = module.rds.rds_username
+  sensitive   = false
+}
+
+output "lambda_security_group_id" {
+  description = "ID del Security Group para funciones Lambda"
+  value       = module.rds_security_groups.lambda_security_group_id
+}
+
+output "rds_security_group_id" {
+  description = "ID del Security Group para RDS"
+  value       = module.rds_security_groups.rds_security_group_id
+}
+
+output "vpc_id" {
+  description = "ID de la VPC"
+  value       = module.rds.vpc_id
+}
+
+output "subnet_ids" {
+  description = "IDs de las subnets para Lambda"
+  value       = module.rds.subnet_ids
+}
+
+output "database_url" {
+  description = "URL completa de conexión a la base de datos (sensible)"
+  value       = module.rds.database_url
+  sensitive   = true
+}

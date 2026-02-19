@@ -62,3 +62,82 @@ variable "oidc_provider_arn" {
   type        = string
   default     = ""
 }
+
+# Variables para RDS
+variable "db_name" {
+  description = "Nombre de la base de datos"
+  type        = string
+  default     = "foodoffice"
+}
+
+variable "db_username" {
+  description = "Usuario maestro de la base de datos"
+  type        = string
+  default     = "foodoffice"
+}
+
+variable "db_password" {
+  description = "Contraseña maestra de la base de datos (sensible)"
+  type        = string
+  sensitive   = true
+}
+
+variable "db_instance_class" {
+  description = "Clase de instancia RDS (db.t2.micro para AWS Free Tier)"
+  type        = string
+  default     = "db.t2.micro"
+}
+
+variable "db_engine_version" {
+  description = "Versión del motor PostgreSQL"
+  type        = string
+  default     = "16.1"
+}
+
+variable "db_allocated_storage" {
+  description = "Almacenamiento inicial asignado en GB (20 GB máximo para AWS Free Tier)"
+  type        = number
+  default     = 20
+}
+
+variable "db_multi_az" {
+  description = "Habilitar despliegue Multi-AZ"
+  type        = bool
+  default     = false
+}
+
+variable "db_backup_retention_period" {
+  description = "Período de retención de backups en días (1 día para AWS Free Tier)"
+  type        = number
+  default     = 1
+}
+
+variable "db_backup_window" {
+  description = "Ventana de backup"
+  type        = string
+  default     = "03:00-04:00"
+}
+
+variable "db_maintenance_window" {
+  description = "Ventana de mantenimiento"
+  type        = string
+  default     = "mon:04:00-mon:05:00"
+}
+
+variable "db_skip_final_snapshot" {
+  description = "Omitir snapshot final al destruir (establecer en false en producción)"
+  type        = bool
+  default     = true
+}
+
+variable "db_deletion_protection" {
+  description = "Habilitar protección contra eliminación"
+  type        = bool
+  default     = false
+}
+
+variable "admin_cidr_blocks" {
+  description = "Bloques CIDR permitidos para acceso administrativo a RDS (opcional)"
+  type        = list(string)
+  default     = []
+}

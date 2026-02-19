@@ -71,3 +71,57 @@ module "iam_oidc" {
     Owner       = "infrastructure"
   })
 }
+
+# Data source para obtener la VPC por defecto
+data "aws_vpc" "default" {
+  default = true
+}
+
+# Módulo de Security Groups para RDS y Lambda
+module "rds_security_groups" {
+  source = "git::https://github.com/thiagoh20/terraform-modules.git//security-groups?ref=main"
+
+  project_name     = var.project_name
+  environment      = var.environment
+  vpc_id           = data.aws_vpc.default.id
+  admin_cidr_blocks = var.admin_cidr_blocks
+
+  tags = merge(var.tags, {
+    Name        = "foodoffice-rds-security-groups"
+    Project     = "foodoffice"
+    Environment = var.environment
+    Owner       = "backend"
+  })
+}
+
+# Módulo de RDS PostgreSQL
+module "rds" {
+  source = "git::https://github.com/thiagoh20/terraform-modules.git//rds?ref=main"
+
+  project_name         = var.project_name
+  environment          = var.environment
+  rds_security_group_id = module.rds_security_groups.rds_security_group_id
+
+  db_name     = var.db_name
+  db_username = var.db_username
+  db_password = var.db_password
+
+  db_instance_class      = var.db_instance_class
+  db_engine_version      = var.db_engine_version
+  db_allocated_storage   = var.db_allocated_storage
+  db_multi_az            = var.db_multi_az
+
+  db_backup_retention_period = var.db_backup_retention_period
+  db_backup_window           = var.db_backup_window
+  db_maintenance_window      = var.db_maintenance_window
+
+  db_skip_final_snapshot = var.db_skip_final_snapshot
+  db_deletion_protection = var.db_deletion_protection
+
+  tags = merge(var.tags, {
+    Name        = "foodoffice-rds"
+    Project     = "foodoffice"
+    Environment = var.environment
+    Owner       = "backend"
+  })
+}
