@@ -130,7 +130,8 @@ module "rds" {
   db_allocated_storage   = var.db_allocated_storage
   db_multi_az            = var.db_multi_az
   
-  db_storage_encrypted   = false
+  # db.t3.micro sí soporta encriptación en reposo
+  db_storage_encrypted   = true
 
   db_backup_retention_period = var.db_backup_retention_period
   db_backup_window           = var.db_backup_window

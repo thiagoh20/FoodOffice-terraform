@@ -83,15 +83,15 @@ variable "db_password" {
 }
 
 variable "db_instance_class" {
-  description = "Clase de instancia RDS (db.t2.micro para AWS Free Tier)"
+  description = "Clase de instancia RDS (db.t3.micro para AWS Free Tier)"
   type        = string
-  default     = "db.t2.micro"
+  default     = "db.t3.micro"
 }
 
 variable "db_engine_version" {
   description = "Versión del motor PostgreSQL"
   type        = string
-  default     = "15.4"
+  default     = "16.3"
 }
 
 variable "db_allocated_storage" {
