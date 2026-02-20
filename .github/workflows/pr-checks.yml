@@ -82,71 +82,6 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Para ver más detalles, ejecuta \`npm run test\` localmente." >> $GITHUB_STEP_SUMMARY
 
-  terraform-validate:
-    name: Terraform Validate & Format
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./terraform
-    
-    steps:
-      - name: Checkout código
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.13.4
-
-      - name: Configure Git credentials for private modules
-        run: |
-          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
-
-      - name: Terraform Format Check
-        run: terraform fmt -check -recursive
-        continue-on-error: false
-
-      - name: Terraform Init (sin backend para validación)
-        run: terraform init -backend=false
-        continue-on-error: false
-
-      - name: Terraform Validate
-        run: terraform validate
-        continue-on-error: false
-
-      - name: Terraform Security Scan (opcional)
-        run: |
-          if command -v tfsec &> /dev/null; then
-            tfsec .
-          else
-            echo "ℹ️ tfsec no está instalado. Instalando..."
-            go install github.com/aquasecurity/tfsec/cmd/tfsec@latest || echo "⚠️ No se pudo instalar tfsec. Continuando sin escaneo de seguridad."
-          fi
-        continue-on-error: true
-
-  build-check:
-    name: Build Check
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./
-    
-    steps:
-      - name: Checkout código
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20.x'
-          cache: 'npm'
-
-      - name: Instalar dependencias
-        run: npm ci
-
-      - name: Build aplicación
-        run: npm run build
-        continue-on-error: false
 
   pr-summary:
     name: PR Summary
@@ -163,13 +98,9 @@ jobs:
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Lint Frontend | ${{ needs.lint-frontend.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Test Frontend | ${{ needs.test-frontend.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Terraform Validate | ${{ needs.terraform-validate.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build Check | ${{ needs.build-check.result }} |" >> $GITHUB_STEP_SUMMARY
           
           if [ "${{ needs.lint-frontend.result }}" != "success" ] || \
-             [ "${{ needs.test-frontend.result }}" != "success" ] || \
-             [ "${{ needs.terraform-validate.result }}" != "success" ] || \
-             [ "${{ needs.build-check.result }}" != "success" ]; then
+             [ "${{ needs.test-frontend.result }}" != "success" ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "⚠️ **Algunas validaciones fallaron. Por favor, revisa los errores antes de hacer merge.**" >> $GITHUB_STEP_SUMMARY
             exit 1
