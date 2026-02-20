@@ -40,14 +40,53 @@ echo "$LAMBDA_FUNCTIONS" | tr '\t' '\n' | while read -r FUNCTION; do
     
     # Remover configuración VPC de Lambda
     echo "  🔄 Removiendo configuración VPC de $FUNCTION..."
+    
+    # Esperar a que la función esté en estado Active si está en proceso de actualización
+    echo "  ⏳ Verificando estado de la función..."
+    MAX_WAIT=60
+    WAIT_COUNT=0
+    while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+      FUNCTION_STATE=$(aws lambda get-function-configuration \
+        --function-name "$FUNCTION" \
+        --region "$AWS_REGION" \
+        --query 'LastUpdateStatus' \
+        --output text 2>/dev/null || echo "Unknown")
+      
+      if [ "$FUNCTION_STATE" = "Successful" ] || [ "$FUNCTION_STATE" = "InProgress" ]; then
+        break
+      fi
+      sleep 2
+      WAIT_COUNT=$((WAIT_COUNT + 2))
+    done
+    
+    # Remover VPC config usando parámetros vacíos
     aws lambda update-function-configuration \
       --function-name "$FUNCTION" \
       --region "$AWS_REGION" \
-      --vpc-config "{}" \
-      --no-cli-pager 2>/dev/null
+      --vpc-config SubnetIds=[],SecurityGroupIds=[] \
+      --no-cli-pager > /dev/null 2>&1
     
-    if [ $? -eq 0 ]; then
-      echo "  ✅ VPC removido de $FUNCTION"
+    UPDATE_RESULT=$?
+    
+    if [ $UPDATE_RESULT -eq 0 ]; then
+      echo "  ✅ Comando de remoción de VPC enviado para $FUNCTION"
+      echo "  ⏳ Esperando a que AWS procese el cambio..."
+      
+      # Esperar a que la actualización se complete
+      sleep 15
+      
+      # Verificar que el VPC fue removido
+      VPC_CONFIG=$(aws lambda get-function-configuration \
+        --function-name "$FUNCTION" \
+        --region "$AWS_REGION" \
+        --query 'VpcConfig.VpcId' \
+        --output text 2>/dev/null || echo "None")
+      
+      if [ "$VPC_CONFIG" = "None" ] || [ -z "$VPC_CONFIG" ]; then
+        echo "  ✅ VPC removido exitosamente de $FUNCTION"
+      else
+        echo "  ⚠️  VPC aún presente en $FUNCTION (puede requerir más tiempo)"
+      fi
     else
       echo "  ⚠️  No se pudo actualizar $FUNCTION (puede que ya no tenga VPC o no exista)"
     fi
