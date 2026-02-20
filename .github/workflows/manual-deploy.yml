@@ -43,32 +43,45 @@ jobs:
         run: |
           git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
-      - name: Limpiar Digest del lock en DynamoDB (preventivo)
+      - name: Limpiar lock en DynamoDB si el estado no existe en S3
         working-directory: ./
         run: |
-          echo "🔧 Limpiando Digest del lock en DynamoDB como medida preventiva..."
+          echo "🔍 Verificando si el estado existe en S3..."
           LOCK_ID="foodoffice-terraform-state/environments/dev/terraform.tfstate"
+          STATE_KEY="environments/dev/terraform.tfstate"
           
-          # Verificar si existe el lock
-          LOCK_EXISTS=$(aws dynamodb get-item \
-            --table-name terraform-state-lock \
-            --key "{\"LockID\": {\"S\": \"${LOCK_ID}\"}}" \
-            --region us-east-2 \
-            --query 'Item' \
-            --output text 2>/dev/null || echo "None")
-          
-          if [ "$LOCK_EXISTS" != "None" ] && [ -n "$LOCK_EXISTS" ]; then
-            echo "🗑️ Eliminando Digest del lock existente..."
-            aws dynamodb update-item \
+          # Verificar si existe el estado en S3
+          if aws s3 ls "s3://foodoffice-terraform-state/${STATE_KEY}" --region us-east-2 &> /dev/null; then
+            echo "✅ Estado encontrado en S3"
+            
+            # Si existe el estado, solo limpiar el Digest del lock
+            LOCK_EXISTS=$(aws dynamodb get-item \
               --table-name terraform-state-lock \
               --key "{\"LockID\": {\"S\": \"${LOCK_ID}\"}}" \
-              --update-expression "REMOVE Digest" \
-              --region us-east-2 2>&1 || {
-              echo "⚠️ No se pudo eliminar el Digest (puede que no exista). Continuando..."
-            }
-            echo "✅ Digest limpiado"
+              --region us-east-2 \
+              --query 'Item' \
+              --output text 2>/dev/null || echo "None")
+            
+            if [ "$LOCK_EXISTS" != "None" ] && [ -n "$LOCK_EXISTS" ]; then
+              echo "🗑️ Eliminando Digest del lock existente..."
+              aws dynamodb update-item \
+                --table-name terraform-state-lock \
+                --key "{\"LockID\": {\"S\": \"${LOCK_ID}\"}}" \
+                --update-expression "REMOVE Digest" \
+                --region us-east-2 2>&1 || echo "⚠️ No se pudo eliminar el Digest"
+              echo "✅ Digest limpiado"
+            fi
           else
-            echo "ℹ️ No hay lock existente. Continuando normalmente..."
+            echo "⚠️ Estado NO encontrado en S3 (bucket vacío o estado borrado)"
+            echo "🗑️ Eliminando lock completo de DynamoDB ya que no hay estado en S3..."
+            
+            # Eliminar el lock completo si no hay estado
+            aws dynamodb delete-item \
+              --table-name terraform-state-lock \
+              --key "{\"LockID\": {\"S\": \"${LOCK_ID}\"}}" \
+              --region us-east-2 2>&1 || echo "⚠️ No se pudo eliminar el lock (puede que no exista)"
+            
+            echo "✅ Lock eliminado. Terraform creará un estado nuevo."
           fi
         continue-on-error: true
 
