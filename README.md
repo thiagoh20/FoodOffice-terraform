@@ -17,6 +17,9 @@ pnpm install
 
 Crea un archivo `.env` en la raíz del proyecto frontend con las siguientes variables:
 
+
+
+
 ```env
 # URL del backend API
 VITE_API_URL=http://localhost:3000
