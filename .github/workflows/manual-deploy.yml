@@ -53,175 +53,12 @@ jobs:
             -backend-config="dynamodb_table=terraform-state-lock" \
             -backend-config="encrypt=true"
 
-      - name: Importar recursos existentes al estado de Terraform
-        working-directory: ./
-        run: |
-          echo "🔄 Importando recursos existentes que pueden causar conflictos..."
-          chmod +x scripts/import-existing-resources.sh
-          ./scripts/import-existing-resources.sh || echo "⚠️ Algunos recursos no se pudieron importar, continuando..."
-        continue-on-error: true
-        env:
-          AWS_REGION: us-east-1
-          ENVIRONMENT: dev
-          PROJECT_NAME: foodoffice
-          TERRAFORM_DIR: terraform
-          TF_VAR_environment: dev
-          TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
-          TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
-          TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
-          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
-
-      - name: Terraform Plan
-        working-directory: ./terraform
-        run: terraform plan -out=tfplan
-        env:
-          TF_VAR_environment: dev
-          TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
-          TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
-          TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
-          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
-
-      - name: Eliminar regla de seguridad duplicada (si existe)
-        working-directory: ./terraform
-        continue-on-error: true
-        run: |
-          # Obtener IDs de Security Groups desde outputs de Terraform
-          LAMBDA_SG=$(terraform output -raw lambda_security_group_id 2>/dev/null || echo "sg-07387339b35fe5c83")
-          RDS_SG=$(terraform output -raw rds_security_group_id 2>/dev/null || echo "sg-05ab21fca371a7df5")
-          
-          echo "🔍 Verificando si existe regla duplicada..."
-          echo "Lambda SG: $LAMBDA_SG"
-          echo "RDS SG: $RDS_SG"
-          
-          # Verificar si la regla existe usando describe-security-groups
-          HAS_RULE=$(aws ec2 describe-security-groups \
-            --group-ids "${RDS_SG}" \
-            --query "SecurityGroups[0].IpPermissions[?FromPort==\`5432\` && ToPort==\`5432\` && IpProtocol==\`tcp\` && length(UserIdGroupPairs[?GroupId==\`${LAMBDA_SG}\`]) > \`0\`]" \
-            --output text 2>/dev/null || echo "")
-          
-          if [ -n "$HAS_RULE" ] && [ "$HAS_RULE" != "None" ]; then
-            echo "⚠️  Regla duplicada encontrada. Eliminándola para que Terraform la cree..."
-            
-            # Eliminar la regla usando revoke-security-group-ingress
-            aws ec2 revoke-security-group-ingress \
-              --group-id "${RDS_SG}" \
-              --protocol tcp \
-              --port 5432 \
-              --source-group "${LAMBDA_SG}" 2>&1 || {
-              echo "⚠️  No se pudo eliminar la regla. Puede que ya no exista o haya un problema de permisos."
-              exit 0
-            }
-            
-            echo "✅ Regla eliminada exitosamente. Terraform la creará de nuevo."
-          else
-            echo "✅ No se encontró regla duplicada. Terraform la creará normalmente."
-          fi
-        env:
-          TF_VAR_environment: dev
-          TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
-          TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
-          TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
-          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
 
       - name: Terraform Apply
         id: terraform-apply
         working-directory: ./terraform
         continue-on-error: true
         run: terraform apply -auto-approve tfplan 2>&1 | tee /tmp/apply-output.txt
-        env:
-          TF_VAR_environment: dev
-          TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
-          TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
-          TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
-          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
-
-      - name: Manejar errores de recursos duplicados
-        if: steps.terraform-apply.outcome == 'failure'
-        working-directory: ./terraform
-        continue-on-error: true
-        run: |
-          APPLY_OUTPUT=$(cat /tmp/apply-output.txt 2>/dev/null || echo "")
-          
-          # Manejar error de regla de seguridad duplicada
-          if echo "$APPLY_OUTPUT" | grep -q "InvalidPermission.Duplicate"; then
-            echo "⚠️  Error de regla duplicada detectado. Eliminando regla existente..."
-            
-            LAMBDA_SG=$(terraform output -raw lambda_security_group_id 2>/dev/null || echo "sg-07387339b35fe5c83")
-            RDS_SG=$(terraform output -raw rds_security_group_id 2>/dev/null || echo "sg-05ab21fca371a7df5")
-            
-            echo "Eliminando regla: Lambda SG $LAMBDA_SG -> RDS SG $RDS_SG (puerto 5432)"
-            
-            aws ec2 revoke-security-group-ingress \
-              --group-id "${RDS_SG}" \
-              --protocol tcp \
-              --port 5432 \
-              --source-group "${LAMBDA_SG}" 2>&1 || {
-              echo "⚠️  No se pudo eliminar la regla. Puede que ya no exista."
-            }
-            
-            echo "🔄 Re-ejecutando terraform apply..."
-            terraform apply -auto-approve tfplan || {
-              echo "❌ Error al re-ejecutar terraform apply"
-              exit 1
-            }
-            
-            echo "✅ Terraform apply completado exitosamente después de eliminar la regla duplicada"
-          
-          # Manejar error de CloudFront OAC duplicado
-          elif echo "$APPLY_OUTPUT" | grep -q "OriginAccessControlAlreadyExists"; then
-            echo "⚠️  CloudFront Origin Access Control ya existe"
-            echo "💡 Intentando importar el OAC existente..."
-            
-            OAC_NAME="foodoffice-frontend-dev-oac"
-            OAC_ID=$(aws cloudfront list-origin-access-controls \
-              --query "OriginAccessControlList.Items[?Name=='$OAC_NAME'].Id" \
-              --output text 2>/dev/null || echo "")
-            
-            if [ -n "$OAC_ID" ] && [ "$OAC_ID" != "None" ]; then
-              echo "   Importando OAC: $OAC_ID"
-              terraform import \
-                -var="environment=dev" \
-                -var="bucket_name=${{ secrets.TF_VAR_BUCKET_NAME }}" \
-                -var="github_repository=${{ secrets.TF_VAR_GITHUB_REPOSITORY }}" \
-                -var="oidc_provider_arn=${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}" \
-                -var="db_password=${{ secrets.TF_VAR_DB_PASSWORD }}" \
-                "module.foodoffice_frontend_cloudfront.aws_cloudfront_origin_access_control.s3_oac" \
-                "$OAC_ID" 2>&1 || {
-                echo "   ⚠️  No se pudo importar el OAC. Puede que necesites eliminarlo manualmente o usar un data source."
-              }
-              
-              echo "🔄 Re-ejecutando terraform apply..."
-              terraform apply -auto-approve tfplan || {
-                echo "❌ Error al re-ejecutar terraform apply"
-                exit 1
-              }
-            else
-              echo "   ❌ No se pudo encontrar el OAC existente"
-              exit 1
-            fi
-          
-          # Manejar otros errores de recursos duplicados
-          elif echo "$APPLY_OUTPUT" | grep -qE "(already exists|Duplicate|Conflict)"; then
-            echo "⚠️  Error de recurso duplicado detectado"
-            echo "💡 Ejecutando script de importación de recursos existentes..."
-            
-            cd ../
-            chmod +x scripts/import-existing-resources.sh
-            ./scripts/import-existing-resources.sh || echo "⚠️ Algunos recursos no se pudieron importar"
-            
-            cd terraform
-            echo "🔄 Re-ejecutando terraform apply..."
-            terraform apply -auto-approve tfplan || {
-              echo "❌ Error al re-ejecutar terraform apply"
-              echo "📋 Output del error:"
-              echo "$APPLY_OUTPUT"
-              exit 1
-            }
-          else
-            echo "❌ Error diferente. Mostrando output:"
-            echo "$APPLY_OUTPUT"
-            exit 1
-          fi
         env:
           TF_VAR_environment: dev
           TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
@@ -246,58 +83,71 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.13.4
+      # - name: Setup Terraform
+      #   uses: hashicorp/setup-terraform@v3
+      #   with:
+      #     terraform_version: 1.13.4
 
-      - name: Configure Git credentials for private modules
-        run: |
-          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+      # - name: Configure Git credentials for private modules
+      #   run: |
+      #     git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
-      - name: Terraform Init
-        working-directory: ./terraform
-        run: |
-          terraform init \
-            -backend-config="bucket=foodoffice-terraform-state" \
-            -backend-config="key=environments/dev/terraform.tfstate" \
-            -backend-config="region=us-east-2" \
-            -backend-config="dynamodb_table=terraform-state-lock" \
-            -backend-config="encrypt=true"
+      # - name: Terraform Init
+      #   working-directory: ./terraform
+      #   run: |
+      #     terraform init \
+      #       -backend-config="bucket=foodoffice-terraform-state" \
+      #       -backend-config="key=environments/dev/terraform.tfstate" \
+      #       -backend-config="region=us-east-2" \
+      #       -backend-config="dynamodb_table=terraform-state-lock" \
+      #       -backend-config="encrypt=true"
 
-      - name: Importar recursos huérfanos al Terraform state
+      # - name: Importar recursos huérfanos al Terraform state
+      #   working-directory: ./
+      #   run: |
+      #     echo "🔍 Buscando e importando recursos huérfanos al Terraform state..."
+      #     chmod +x scripts/cleanup-orphaned-resources.sh
+      #     ./scripts/cleanup-orphaned-resources.sh
+      #   continue-on-error: true
+      #   env:
+      #     AWS_REGION: us-east-1
+      #     PROJECT_NAME: foodoffice
+      #     ENVIRONMENT: dev
+      #     TERRAFORM_DIR: terraform
+      #     BACKEND_BUCKET: foodoffice-terraform-state
+      #     BACKEND_KEY: environments/dev/terraform.tfstate
+      #     BACKEND_REGION: us-east-2
+      #     BACKEND_DYNAMODB: terraform-state-lock
+
+      # - name: Limpiar ENIs de Lambda antes de destroy
+      #   working-directory: ./
+      #   run: |
+      #     echo "🧹 Limpiando ENIs de Lambda antes de terraform destroy..."
+      #     chmod +x scripts/cleanup-lambda-enis.sh
+      #     ./scripts/cleanup-lambda-enis.sh
+      #   continue-on-error: true
+      #   env:
+      #     AWS_REGION: us-east-1
+
+      # - name: Terraform Destroy
+      #   working-directory: ./terraform
+      #   run: terraform destroy -auto-approve
+      #   env:
+      #     TF_VAR_environment: dev
+      #     TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
+      #     TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
+      #     TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
+      #     TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
+
+      - name: Limpiar estado de Terraform en S3
+        if: always()
         working-directory: ./
         run: |
-          echo "🔍 Buscando e importando recursos huérfanos al Terraform state..."
-          chmod +x scripts/cleanup-orphaned-resources.sh
-          ./scripts/cleanup-orphaned-resources.sh
+          echo "🗑️ Limpiando estado de Terraform en S3 después del destroy..."
+          chmod +x scripts/cleanup-terraform-state.sh
+          ENVIRONMENT=dev \
+          BUCKET_NAME=foodoffice-terraform-state \
+          BACKEND_REGION=us-east-2 \
+          DYNAMODB_TABLE=terraform-state-lock \
+          ./scripts/cleanup-terraform-state.sh <<< "BORRAR" || echo "⚠️ Error al limpiar estado (puede que ya esté limpio)"
         continue-on-error: true
-        env:
-          AWS_REGION: us-east-1
-          PROJECT_NAME: foodoffice
-          ENVIRONMENT: dev
-          TERRAFORM_DIR: terraform
-          BACKEND_BUCKET: foodoffice-terraform-state
-          BACKEND_KEY: environments/dev/terraform.tfstate
-          BACKEND_REGION: us-east-2
-          BACKEND_DYNAMODB: terraform-state-lock
-
-      - name: Limpiar ENIs de Lambda antes de destroy
-        working-directory: ./
-        run: |
-          echo "🧹 Limpiando ENIs de Lambda antes de terraform destroy..."
-          chmod +x scripts/cleanup-lambda-enis.sh
-          ./scripts/cleanup-lambda-enis.sh
-        continue-on-error: true
-        env:
-          AWS_REGION: us-east-1
-
-      - name: Terraform Destroy
-        working-directory: ./terraform
-        run: terraform destroy -auto-approve
-        env:
-          TF_VAR_environment: dev
-          TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
-          TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
-          TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
-          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
