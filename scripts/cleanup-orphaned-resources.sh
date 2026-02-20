@@ -48,21 +48,26 @@ BACKEND_DYNAMODB=${BACKEND_DYNAMODB:-terraform-state-lock}
 
 # Inicializar Terraform con backend
 echo "🔧 Inicializando Terraform con backend..."
+echo "   Esto puede tomar unos momentos si necesita descargar módulos..."
+
 terraform init \
   -backend-config="bucket=$BACKEND_BUCKET" \
   -backend-config="key=$BACKEND_KEY" \
   -backend-config="region=$BACKEND_REGION" \
   -backend-config="dynamodb_table=$BACKEND_DYNAMODB" \
   -backend-config="encrypt=true" \
-  -reconfigure > /dev/null 2>&1
+  -reconfigure 2>&1 | grep -v "Warning\|Downloading\|Installing" | tail -10
 
-if [ $? -ne 0 ]; then
+if [ ${PIPESTATUS[0]} -ne 0 ]; then
   echo "⚠️  No se pudo inicializar Terraform con backend, intentando sin backend..."
-  terraform init -backend=false > /dev/null 2>&1 || {
+  terraform init -backend=false 2>&1 | grep -v "Warning\|Downloading\|Installing" | tail -10
+  if [ ${PIPESTATUS[0]} -ne 0 ]; then
     echo "❌ No se pudo inicializar Terraform"
     exit 1
-  }
+  fi
 fi
+
+echo "✅ Terraform inicializado"
 
 echo ""
 echo "📋 Buscando recursos huérfanos por tags..."
@@ -148,38 +153,55 @@ if [ -n "$SG_IDS" ]; then
       IMPORTED=false
       if echo "$SG_NAME" | grep -qi "lambda"; then
         echo "  🔄 Intentando importar como Lambda Security Group..."
-        timeout 30 terraform import \
-          -var="environment=$ENVIRONMENT" \
-          -var="project_name=$PROJECT_NAME" \
-          "module.rds_security_groups.aws_security_group.lambda" "$SG_ID" > /tmp/import-output.log 2>&1
+        echo "     Comando: terraform import module.rds_security_groups.aws_security_group.lambda $SG_ID"
         
-        if [ $? -eq 0 ]; then
+        # Usar timeout y redirigir stderr también
+        timeout 30 bash -c "terraform import \
+          -var='environment=$ENVIRONMENT' \
+          -var='project_name=$PROJECT_NAME' \
+          'module.rds_security_groups.aws_security_group.lambda' '$SG_ID' 2>&1" > /tmp/import-output.log 2>&1
+        
+        IMPORT_EXIT=$?
+        if [ $IMPORT_EXIT -eq 0 ]; then
           echo "  ✅ Security Group Lambda importado"
           IMPORTED=true
+        elif [ $IMPORT_EXIT -eq 124 ]; then
+          echo "  ⏱️  Timeout al importar (puede que el módulo esté descargándose)"
         else
           echo "  ⚠️  No se pudo importar como Lambda SG"
-          cat /tmp/import-output.log | grep -v "Warning" | tail -3
+          grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | tail -5
         fi
       fi
       
       if [ "$IMPORTED" = false ] && echo "$SG_NAME" | grep -qi "rds"; then
         echo "  🔄 Intentando importar como RDS Security Group..."
-        timeout 30 terraform import \
-          -var="environment=$ENVIRONMENT" \
-          -var="project_name=$PROJECT_NAME" \
-          "module.rds_security_groups.aws_security_group.rds" "$SG_ID" > /tmp/import-output.log 2>&1
+        echo "     Comando: terraform import module.rds_security_groups.aws_security_group.rds $SG_ID"
         
-        if [ $? -eq 0 ]; then
+        timeout 30 bash -c "terraform import \
+          -var='environment=$ENVIRONMENT' \
+          -var='project_name=$PROJECT_NAME' \
+          'module.rds_security_groups.aws_security_group.rds' '$SG_ID' 2>&1" > /tmp/import-output.log 2>&1
+        
+        IMPORT_EXIT=$?
+        if [ $IMPORT_EXIT -eq 0 ]; then
           echo "  ✅ Security Group RDS importado"
           IMPORTED=true
+        elif [ $IMPORT_EXIT -eq 124 ]; then
+          echo "  ⏱️  Timeout al importar (puede que el módulo esté descargándose)"
         else
           echo "  ⚠️  No se pudo importar como RDS SG"
-          cat /tmp/import-output.log | grep -v "Warning" | tail -3
+          grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | tail -5
         fi
       fi
       
       if [ "$IMPORTED" = false ]; then
-        echo "  ⚠️  No se pudo importar $SG_ID (puede requerir configuración manual o el recurso no existe en la configuración)"
+        echo "  ⚠️  No se pudo importar $SG_ID"
+        echo "  💡 Puedes importarlo manualmente con:"
+        if echo "$SG_NAME" | grep -qi "lambda"; then
+          echo "     terraform import -var='environment=$ENVIRONMENT' module.rds_security_groups.aws_security_group.lambda $SG_ID"
+        elif echo "$SG_NAME" | grep -qi "rds"; then
+          echo "     terraform import -var='environment=$ENVIRONMENT' module.rds_security_groups.aws_security_group.rds $SG_ID"
+        fi
       fi
     fi
   done
