@@ -86,7 +86,7 @@ jobs:
   pr-summary:
     name: PR Summary
     runs-on: ubuntu-latest
-    needs: [lint-frontend, test-frontend, terraform-validate, build-check]
+    needs: [lint-frontend, test-frontend]
     if: always()
     
     steps:
