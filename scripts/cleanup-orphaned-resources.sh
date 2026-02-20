@@ -147,21 +147,39 @@ if [ -n "$SG_IDS" ]; then
       # Intentar importar según el nombre
       IMPORTED=false
       if echo "$SG_NAME" | grep -qi "lambda"; then
-        terraform import -var="environment=$ENVIRONMENT" "module.rds_security_groups.aws_security_group.lambda" "$SG_ID" 2>&1 | grep -v "Warning" && {
+        echo "  🔄 Intentando importar como Lambda Security Group..."
+        timeout 30 terraform import \
+          -var="environment=$ENVIRONMENT" \
+          -var="project_name=$PROJECT_NAME" \
+          "module.rds_security_groups.aws_security_group.lambda" "$SG_ID" > /tmp/import-output.log 2>&1
+        
+        if [ $? -eq 0 ]; then
           echo "  ✅ Security Group Lambda importado"
           IMPORTED=true
-        } || echo "  ⚠️  No se pudo importar como Lambda SG"
+        else
+          echo "  ⚠️  No se pudo importar como Lambda SG"
+          cat /tmp/import-output.log | grep -v "Warning" | tail -3
+        fi
       fi
       
       if [ "$IMPORTED" = false ] && echo "$SG_NAME" | grep -qi "rds"; then
-        terraform import -var="environment=$ENVIRONMENT" "module.rds_security_groups.aws_security_group.rds" "$SG_ID" 2>&1 | grep -v "Warning" && {
+        echo "  🔄 Intentando importar como RDS Security Group..."
+        timeout 30 terraform import \
+          -var="environment=$ENVIRONMENT" \
+          -var="project_name=$PROJECT_NAME" \
+          "module.rds_security_groups.aws_security_group.rds" "$SG_ID" > /tmp/import-output.log 2>&1
+        
+        if [ $? -eq 0 ]; then
           echo "  ✅ Security Group RDS importado"
           IMPORTED=true
-        } || echo "  ⚠️  No se pudo importar como RDS SG"
+        else
+          echo "  ⚠️  No se pudo importar como RDS SG"
+          cat /tmp/import-output.log | grep -v "Warning" | tail -3
+        fi
       fi
       
       if [ "$IMPORTED" = false ]; then
-        echo "  ⚠️  No se pudo importar $SG_ID (puede requerir configuración manual)"
+        echo "  ⚠️  No se pudo importar $SG_ID (puede requerir configuración manual o el recurso no existe en la configuración)"
       fi
     fi
   done
@@ -234,20 +252,38 @@ if [ -n "$SUBNET_IDS" ]; then
       
       IMPORTED=false
       if [ "$SUBNET_TYPE" = "public" ]; then
-        terraform import -var="environment=$ENVIRONMENT" "module.vpc.aws_subnet.public[0]" "$SUBNET_ID" 2>&1 | grep -v "Warning" && {
+        timeout 30 terraform import \
+          -var="environment=$ENVIRONMENT" \
+          -var="project_name=$PROJECT_NAME" \
+          "module.vpc.aws_subnet.public[0]" "$SUBNET_ID" > /tmp/import-output.log 2>&1
+        if [ $? -eq 0 ]; then
           echo "  ✅ Subnet pública importada"
           IMPORTED=true
-        }
+        else
+          cat /tmp/import-output.log | grep -v "Warning" | tail -3
+        fi
       elif [ "$SUBNET_TYPE" = "private-app" ]; then
-        terraform import -var="environment=$ENVIRONMENT" "module.vpc.aws_subnet.private_app[0]" "$SUBNET_ID" 2>&1 | grep -v "Warning" && {
+        timeout 30 terraform import \
+          -var="environment=$ENVIRONMENT" \
+          -var="project_name=$PROJECT_NAME" \
+          "module.vpc.aws_subnet.private_app[0]" "$SUBNET_ID" > /tmp/import-output.log 2>&1
+        if [ $? -eq 0 ]; then
           echo "  ✅ Subnet privada de app importada"
           IMPORTED=true
-        }
+        else
+          cat /tmp/import-output.log | grep -v "Warning" | tail -3
+        fi
       elif [ "$SUBNET_TYPE" = "private-data" ]; then
-        terraform import -var="environment=$ENVIRONMENT" "module.vpc.aws_subnet.private_data[0]" "$SUBNET_ID" 2>&1 | grep -v "Warning" && {
+        timeout 30 terraform import \
+          -var="environment=$ENVIRONMENT" \
+          -var="project_name=$PROJECT_NAME" \
+          "module.vpc.aws_subnet.private_data[0]" "$SUBNET_ID" > /tmp/import-output.log 2>&1
+        if [ $? -eq 0 ]; then
           echo "  ✅ Subnet privada de datos importada"
           IMPORTED=true
-        }
+        else
+          cat /tmp/import-output.log | grep -v "Warning" | tail -3
+        fi
       fi
       
       if [ "$IMPORTED" = false ]; then
@@ -279,11 +315,17 @@ if [ -n "$VPC_IDS" ]; then
         continue
       fi
       
-      terraform import -var="environment=$ENVIRONMENT" "module.vpc.aws_vpc.main" "$VPC_ID" 2>&1 | grep -v "Warning" && {
+      timeout 30 terraform import \
+        -var="environment=$ENVIRONMENT" \
+        -var="project_name=$PROJECT_NAME" \
+        "module.vpc.aws_vpc.main" "$VPC_ID" > /tmp/import-output.log 2>&1
+      
+      if [ $? -eq 0 ]; then
         echo "  ✅ VPC importada"
-      } || {
+      else
         echo "  ⚠️  No se pudo importar $VPC_ID"
-      }
+        cat /tmp/import-output.log | grep -v "Warning" | tail -3
+      fi
     fi
   done
 fi
@@ -309,11 +351,17 @@ if [ -n "$RDS_IDS" ]; then
         continue
       fi
       
-      terraform import -var="environment=$ENVIRONMENT" "module.rds.aws_db_instance.main" "$RDS_ID" 2>&1 | grep -v "Warning" && {
+      timeout 60 terraform import \
+        -var="environment=$ENVIRONMENT" \
+        -var="project_name=$PROJECT_NAME" \
+        "module.rds.aws_db_instance.main" "$RDS_ID" > /tmp/import-output.log 2>&1
+      
+      if [ $? -eq 0 ]; then
         echo "  ✅ RDS importado"
-      } || {
+      else
         echo "  ⚠️  No se pudo importar $RDS_ID"
-      }
+        cat /tmp/import-output.log | grep -v "Warning" | tail -3
+      fi
     fi
   done
 fi
@@ -339,11 +387,17 @@ if [ -n "$BUCKET_NAMES" ]; then
         continue
       fi
       
-      terraform import -var="environment=$ENVIRONMENT" "module.foodoffice_frontend_bucket_name.aws_s3_bucket.main" "$BUCKET_NAME" 2>&1 | grep -v "Warning" && {
+      timeout 30 terraform import \
+        -var="environment=$ENVIRONMENT" \
+        -var="project_name=$PROJECT_NAME" \
+        "module.foodoffice_frontend_bucket_name.aws_s3_bucket.main" "$BUCKET_NAME" > /tmp/import-output.log 2>&1
+      
+      if [ $? -eq 0 ]; then
         echo "  ✅ Bucket importado"
-      } || {
+      else
         echo "  ⚠️  No se pudo importar $BUCKET_NAME"
-      }
+        cat /tmp/import-output.log | grep -v "Warning" | tail -3
+      fi
     fi
   done
 fi
