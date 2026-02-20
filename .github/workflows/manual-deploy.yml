@@ -53,6 +53,24 @@ jobs:
             -backend-config="dynamodb_table=terraform-state-lock" \
             -backend-config="encrypt=true"
 
+      - name: Importar recursos existentes al estado de Terraform
+        working-directory: ./
+        run: |
+          echo "🔄 Importando recursos existentes que pueden causar conflictos..."
+          chmod +x scripts/import-existing-resources.sh
+          ./scripts/import-existing-resources.sh || echo "⚠️ Algunos recursos no se pudieron importar, continuando..."
+        continue-on-error: true
+        env:
+          AWS_REGION: us-east-1
+          ENVIRONMENT: dev
+          PROJECT_NAME: foodoffice
+          TERRAFORM_DIR: terraform
+          TF_VAR_environment: dev
+          TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
+          TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
+          TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
+          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
+
       - name: Terraform Plan
         working-directory: ./terraform
         run: terraform plan -out=tfplan
@@ -117,23 +135,22 @@ jobs:
           TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
           TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
 
-      - name: Manejar error de regla duplicada (respaldo)
+      - name: Manejar errores de recursos duplicados
         if: steps.terraform-apply.outcome == 'failure'
         working-directory: ./terraform
         continue-on-error: true
         run: |
           APPLY_OUTPUT=$(cat /tmp/apply-output.txt 2>/dev/null || echo "")
           
+          # Manejar error de regla de seguridad duplicada
           if echo "$APPLY_OUTPUT" | grep -q "InvalidPermission.Duplicate"; then
             echo "⚠️  Error de regla duplicada detectado. Eliminando regla existente..."
             
-            # Obtener IDs de Security Groups
             LAMBDA_SG=$(terraform output -raw lambda_security_group_id 2>/dev/null || echo "sg-07387339b35fe5c83")
             RDS_SG=$(terraform output -raw rds_security_group_id 2>/dev/null || echo "sg-05ab21fca371a7df5")
             
             echo "Eliminando regla: Lambda SG $LAMBDA_SG -> RDS SG $RDS_SG (puerto 5432)"
             
-            # Eliminar la regla
             aws ec2 revoke-security-group-ingress \
               --group-id "${RDS_SG}" \
               --protocol tcp \
@@ -149,8 +166,59 @@ jobs:
             }
             
             echo "✅ Terraform apply completado exitosamente después de eliminar la regla duplicada"
+          
+          # Manejar error de CloudFront OAC duplicado
+          elif echo "$APPLY_OUTPUT" | grep -q "OriginAccessControlAlreadyExists"; then
+            echo "⚠️  CloudFront Origin Access Control ya existe"
+            echo "💡 Intentando importar el OAC existente..."
+            
+            OAC_NAME="foodoffice-frontend-dev-oac"
+            OAC_ID=$(aws cloudfront list-origin-access-controls \
+              --query "OriginAccessControlList.Items[?Name=='$OAC_NAME'].Id" \
+              --output text 2>/dev/null || echo "")
+            
+            if [ -n "$OAC_ID" ] && [ "$OAC_ID" != "None" ]; then
+              echo "   Importando OAC: $OAC_ID"
+              terraform import \
+                -var="environment=dev" \
+                -var="bucket_name=${{ secrets.TF_VAR_BUCKET_NAME }}" \
+                -var="github_repository=${{ secrets.TF_VAR_GITHUB_REPOSITORY }}" \
+                -var="oidc_provider_arn=${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}" \
+                -var="db_password=${{ secrets.TF_VAR_DB_PASSWORD }}" \
+                "module.foodoffice_frontend_cloudfront.aws_cloudfront_origin_access_control.s3_oac" \
+                "$OAC_ID" 2>&1 || {
+                echo "   ⚠️  No se pudo importar el OAC. Puede que necesites eliminarlo manualmente o usar un data source."
+              }
+              
+              echo "🔄 Re-ejecutando terraform apply..."
+              terraform apply -auto-approve tfplan || {
+                echo "❌ Error al re-ejecutar terraform apply"
+                exit 1
+              }
+            else
+              echo "   ❌ No se pudo encontrar el OAC existente"
+              exit 1
+            fi
+          
+          # Manejar otros errores de recursos duplicados
+          elif echo "$APPLY_OUTPUT" | grep -qE "(already exists|Duplicate|Conflict)"; then
+            echo "⚠️  Error de recurso duplicado detectado"
+            echo "💡 Ejecutando script de importación de recursos existentes..."
+            
+            cd ../
+            chmod +x scripts/import-existing-resources.sh
+            ./scripts/import-existing-resources.sh || echo "⚠️ Algunos recursos no se pudieron importar"
+            
+            cd terraform
+            echo "🔄 Re-ejecutando terraform apply..."
+            terraform apply -auto-approve tfplan || {
+              echo "❌ Error al re-ejecutar terraform apply"
+              echo "📋 Output del error:"
+              echo "$APPLY_OUTPUT"
+              exit 1
+            }
           else
-            echo "❌ Error diferente al de regla duplicada. Mostrando output:"
+            echo "❌ Error diferente. Mostrando output:"
             echo "$APPLY_OUTPUT"
             exit 1
           fi
