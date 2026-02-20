@@ -282,56 +282,42 @@ if [ -n "$SUBNET_IDS" ]; then
         --output text 2>/dev/null || echo "")
       
       IMPORTED=false
-      if [ "$SUBNET_TYPE" = "public" ]; then
+      # Intentar con diferentes índices (0, 1, 2)
+      for INDEX in 0 1 2; do
+        if [ "$SUBNET_TYPE" = "public" ]; then
+          RESOURCE_PATH="module.vpc.aws_subnet.public[$INDEX]"
+        elif [ "$SUBNET_TYPE" = "private-app" ]; then
+          RESOURCE_PATH="module.vpc.aws_subnet.private_app[$INDEX]"
+        elif [ "$SUBNET_TYPE" = "private-data" ]; then
+          RESOURCE_PATH="module.vpc.aws_subnet.private_data[$INDEX]"
+        else
+          break
+        fi
+        
         timeout 30 terraform import \
           -lock=false \
           -var="environment=$ENVIRONMENT" \
           -var="project_name=$PROJECT_NAME" \
-          "module.vpc.aws_subnet.public[0]" "$SUBNET_ID" > /tmp/import-output.log 2>&1
+          "$RESOURCE_PATH" "$SUBNET_ID" > /tmp/import-output.log 2>&1
+        
         if [ $? -eq 0 ]; then
-          echo "  ✅ Subnet pública importada"
+          echo "  ✅ Subnet $SUBNET_TYPE importada con índice [$INDEX]"
           IMPORTED=true
+          break
         elif grep -qi "already managed\|Resource already managed" /tmp/import-output.log; then
           echo "  ✅ Ya está en el Terraform state"
           IMPORTED=true
-        else
-          grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | grep -i "error\|cannot" | head -3
+          break
         fi
-      elif [ "$SUBNET_TYPE" = "private-app" ]; then
-        timeout 30 terraform import \
-          -lock=false \
-          -var="environment=$ENVIRONMENT" \
-          -var="project_name=$PROJECT_NAME" \
-          "module.vpc.aws_subnet.private_app[0]" "$SUBNET_ID" > /tmp/import-output.log 2>&1
-        if [ $? -eq 0 ]; then
-          echo "  ✅ Subnet privada de app importada"
-          IMPORTED=true
-        elif grep -qi "already managed\|Resource already managed" /tmp/import-output.log; then
-          echo "  ✅ Ya está en el Terraform state"
-          IMPORTED=true
-        else
-          grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | grep -i "error\|cannot" | head -3
-        fi
-      elif [ "$SUBNET_TYPE" = "private-data" ]; then
-        timeout 30 terraform import \
-          -lock=false \
-          -var="environment=$ENVIRONMENT" \
-          -var="project_name=$PROJECT_NAME" \
-          "module.vpc.aws_subnet.private_data[0]" "$SUBNET_ID" > /tmp/import-output.log 2>&1
-        if [ $? -eq 0 ]; then
-          echo "  ✅ Subnet privada de datos importada"
-          IMPORTED=true
-        elif grep -qi "already managed\|Resource already managed" /tmp/import-output.log; then
-          echo "  ✅ Ya está en el Terraform state"
-          IMPORTED=true
-        else
-          grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | grep -i "error\|cannot" | head -3
-        fi
-      fi
+      done
       
       if [ "$IMPORTED" = false ]; then
         echo "  ⚠️  No se pudo importar $SUBNET_ID (tipo: $SUBNET_TYPE)"
-        echo "  💡 Puede que el índice [0] no sea correcto, o la subnet ya esté importada con otro índice"
+        ERROR_MSG=$(grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | grep -i "error\|cannot\|does not exist" | head -1)
+        if [ -n "$ERROR_MSG" ]; then
+          echo "     Error: $ERROR_MSG"
+        fi
+        echo "  💡 La subnet puede que ya esté importada o no coincida con la configuración"
       fi
     fi
   done
@@ -372,7 +358,10 @@ if [ -n "$VPC_IDS" ]; then
           echo "  ✅ Ya está en el Terraform state"
         else
           echo "  ⚠️  No se pudo importar $VPC_ID"
-          grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | grep -i "error\|cannot" | head -3
+          ERROR_MSG=$(grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | grep -i "error\|cannot\|does not exist" | head -1)
+          if [ -n "$ERROR_MSG" ]; then
+            echo "     Error: $ERROR_MSG"
+          fi
         fi
       fi
     fi
@@ -404,6 +393,7 @@ if [ -n "$RDS_IDS" ]; then
         -lock=false \
         -var="environment=$ENVIRONMENT" \
         -var="project_name=$PROJECT_NAME" \
+        -var="db_password=dummy" \
         "module.rds.aws_db_instance.main" "$RDS_ID" > /tmp/import-output.log 2>&1
       
       if [ $? -eq 0 ]; then
@@ -413,7 +403,11 @@ if [ -n "$RDS_IDS" ]; then
           echo "  ✅ Ya está en el Terraform state"
         else
           echo "  ⚠️  No se pudo importar $RDS_ID"
-          grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | grep -i "error\|cannot" | head -3
+          ERROR_MSG=$(grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | grep -i "error\|cannot\|does not exist\|required" | head -1)
+          if [ -n "$ERROR_MSG" ]; then
+            echo "     Error: $ERROR_MSG"
+          fi
+          echo "  💡 RDS puede requerir variables adicionales (db_password, etc.)"
         fi
       fi
     fi
@@ -441,11 +435,12 @@ if [ -n "$BUCKET_NAMES" ]; then
         continue
       fi
       
+      # Intentar con el nombre correcto del recurso
       timeout 30 terraform import \
         -lock=false \
         -var="environment=$ENVIRONMENT" \
         -var="project_name=$PROJECT_NAME" \
-        "module.foodoffice_frontend_bucket_name.aws_s3_bucket.main" "$BUCKET_NAME" > /tmp/import-output.log 2>&1
+        "module.foodoffice_frontend_bucket_name.aws_s3_bucket.frontend" "$BUCKET_NAME" > /tmp/import-output.log 2>&1
       
       if [ $? -eq 0 ]; then
         echo "  ✅ Bucket importado"
@@ -454,7 +449,7 @@ if [ -n "$BUCKET_NAMES" ]; then
           echo "  ✅ Ya está en el Terraform state"
         else
           echo "  ⚠️  No se pudo importar $BUCKET_NAME"
-          grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | grep -i "error\|cannot" | head -3
+          grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | grep -i "error\|cannot\|does not exist" | head -3
         fi
       fi
     fi
