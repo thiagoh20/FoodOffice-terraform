@@ -99,6 +99,7 @@ jobs:
   infracost:
     name: Análisis de Costos con Infracost
     runs-on: ubuntu-latest
+    environment: development
     permissions:
       contents: read
       pull-requests: write
