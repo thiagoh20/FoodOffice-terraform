@@ -126,22 +126,54 @@ jobs:
           if echo "$INIT_OUTPUT" | grep -qiE "checksum|state data in S3 does not have the expected content|Calculated checksum|Stored checksum"; then
             echo "🔧 Error de checksum detectado. Reparando automáticamente..."
             
-            # Eliminar el Digest del lock en DynamoDB (solución automática)
             LOCK_ID="foodoffice-terraform-state/environments/dev/terraform.tfstate"
-            echo "🗑️ Eliminando Digest del lock en DynamoDB..."
             
-            # Intentar eliminar el Digest
-            aws dynamodb update-item \
-              --table-name terraform-state-lock \
-              --key "{\"LockID\": {\"S\": \"${LOCK_ID}\"}}" \
-              --update-expression "REMOVE Digest" \
-              --region us-east-2 2>&1 || {
-              echo "⚠️ No se pudo eliminar el Digest. Intentando eliminar el lock completo..."
-              aws dynamodb delete-item \
+            # Intentar extraer el checksum calculado del mensaje de error
+            CALCULATED_CHECKSUM=$(echo "$INIT_OUTPUT" | grep -oE "Calculated checksum:\s*([a-f0-9]+)" | awk '{print $3}' | head -1)
+            
+            if [ -n "$CALCULATED_CHECKSUM" ]; then
+              echo "📝 Checksum calculado encontrado: ${CALCULATED_CHECKSUM}"
+              echo "🔄 Actualizando Digest en DynamoDB con el checksum correcto..."
+              
+              # Actualizar el Digest con el checksum correcto
+              aws dynamodb update-item \
                 --table-name terraform-state-lock \
                 --key "{\"LockID\": {\"S\": \"${LOCK_ID}\"}}" \
-                --region us-east-2 2>&1 || echo "⚠️ No se pudo eliminar el lock"
-            }
+                --update-expression "SET Digest = :digest" \
+                --expression-attribute-values "{\":digest\": {\"S\": \"${CALCULATED_CHECKSUM}\"}}" \
+                --region us-east-2 2>&1
+              
+              if [ $? -eq 0 ]; then
+                echo "✅ Digest actualizado con el checksum correcto"
+              else
+                echo "⚠️ No se pudo actualizar el Digest. Intentando eliminar..."
+                aws dynamodb update-item \
+                  --table-name terraform-state-lock \
+                  --key "{\"LockID\": {\"S\": \"${LOCK_ID}\"}}" \
+                  --update-expression "REMOVE Digest" \
+                  --region us-east-2 2>&1 || {
+                  echo "⚠️ No se pudo eliminar el Digest. Eliminando lock completo..."
+                  aws dynamodb delete-item \
+                    --table-name terraform-state-lock \
+                    --key "{\"LockID\": {\"S\": \"${LOCK_ID}\"}}" \
+                    --region us-east-2 2>&1 || echo "⚠️ No se pudo eliminar el lock"
+                }
+              fi
+            else
+              echo "⚠️ No se pudo extraer el checksum calculado. Eliminando Digest..."
+              # Si no podemos extraer el checksum, eliminar el Digest para que Terraform lo recalcule
+              aws dynamodb update-item \
+                --table-name terraform-state-lock \
+                --key "{\"LockID\": {\"S\": \"${LOCK_ID}\"}}" \
+                --update-expression "REMOVE Digest" \
+                --region us-east-2 2>&1 || {
+                echo "⚠️ No se pudo eliminar el Digest. Eliminando lock completo..."
+                aws dynamodb delete-item \
+                  --table-name terraform-state-lock \
+                  --key "{\"LockID\": {\"S\": \"${LOCK_ID}\"}}" \
+                  --region us-east-2 2>&1 || echo "⚠️ No se pudo eliminar el lock"
+              }
+            fi
             
             echo "✅ Checksum reparado. Reintentando terraform init..."
             cd terraform
