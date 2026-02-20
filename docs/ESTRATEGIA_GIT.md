@@ -17,14 +17,8 @@
 #### `main` (Producción)
 - **Propósito**: Código en producción, siempre estable y desplegado
 - **Protección**: Requiere PR, aprobación de revisores, y todos los checks deben pasar
-- **Merge**: Solo desde `staging` después de pruebas exhaustivas
 - **Deploy**: Automático a producción
 
-#### `staging` (Pre-producción)
-- **Propósito**: Ambiente de staging para pruebas finales antes de producción
-- **Protección**: Requiere PR, aprobación de revisores
-- **Merge**: Desde `develop` o `main` (hotfixes)
-- **Deploy**: Automático a staging
 
 #### `develop` (Desarrollo)
 - **Propósito**: Rama de integración para desarrollo activo
@@ -267,11 +261,6 @@ Closes #123
 - ✅ No permite eliminar branch
 - ✅ Requiere linear history (opcional pero recomendado)
 
-#### `staging`
-- ✅ Requiere PR para merge
-- ✅ Requiere aprobación de al menos 1 revisor
-- ✅ Requiere que todos los checks pasen
-- ✅ No permite force push
 
 #### `develop`
 - ✅ Requiere PR para merge
@@ -348,22 +337,3 @@ npm run check
 - [GitHub Flow](https://guides.github.com/introduction/flow/)
 
 ---
-
-## ❓ Preguntas Frecuentes
-
-**P: ¿Puedo hacer commit directo a `develop`?**
-R: No, siempre usar PRs para mantener trazabilidad.
-
-**P: ¿Qué hacer si necesito hacer un cambio urgente en producción?**
-R: Usar hotfix branch desde `main`, seguir el hotfix flow.
-
-**P: ¿Cuánto tiempo mantener feature branches?**
-R: Idealmente menos de 1 semana. Si toma más tiempo, dividir en PRs más pequeños.
-
-**P: ¿Qué hacer si mi PR tiene muchos commits?**
-R: Usar squash merge o hacer rebase interactivo para limpiar historial.
-
----
-
-**Última actualización**: 2024
-**Mantenedor**: Equipo de Desarrollo FoodOffice
