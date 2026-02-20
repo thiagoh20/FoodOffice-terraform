@@ -38,10 +38,40 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
-          cache: 'npm'
+
+      - name: Obtener caché de npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Limpiar node_modules y lockfiles de pnpm
+        run: |
+          rm -rf node_modules
+          rm -f pnpm-lock.yaml package-lock.json
 
       - name: Instalar dependencias
-        run: npm ci
+        run: npm install
+
+      - name: Configurar variables de entorno
+        run: |
+          # Crear archivo .env con las variables de entorno para desarrollo
+          cat > .env << EOF
+          NODE_ENV=development
+          OWNER_OPEN_ID=${{ secrets.OWNER_OPEN_ID || 'admin-local' }}
+          OWNER_NAME=${{ secrets.OWNER_NAME || 'Administrador' }}
+          VITE_APP_TITLE=${{ secrets.VITE_APP_TITLE || 'Sistema de Pedidos' }}
+          VITE_APP_LOGO=${{ secrets.VITE_APP_LOGO || '/logo.svg' }}
+          OAUTH_SERVER_URL=${{ secrets.OAUTH_SERVER_URL }}
+          VITE_APP_ID=${{ secrets.VITE_APP_ID }}
+          VITE_OAUTH_PORTAL_URL=${{ secrets.VITE_OAUTH_PORTAL_URL }}
+          OAUTH_CLIENT_SECRET=${{ secrets.OAUTH_CLIENT_SECRET }}
+          VITE_API_URL=${{ secrets.VITE_API_URL || 'http://localhost:3000' }}
+          EOF
+          echo "✅ Archivo .env creado para ambiente: dev"
+          echo "Variables configuradas (valores sensibles ocultos)"
 
       - name: Build aplicación
         run: npm run build
@@ -76,12 +106,15 @@ jobs:
           
           S3_BUCKET=$(terraform output -raw s3_bucket_name)
           CLOUDFRONT_ID=$(terraform output -raw cloudfront_distribution_id)
+          CLOUDFRONT_URL=$(terraform output -raw cloudfront_distribution_url)
           
           echo "bucket=$S3_BUCKET" >> $GITHUB_OUTPUT
           echo "cloudfront_id=$CLOUDFRONT_ID" >> $GITHUB_OUTPUT
+          echo "cloudfront_url=$CLOUDFRONT_URL" >> $GITHUB_OUTPUT
           
           echo "S3 Bucket: $S3_BUCKET"
           echo "CloudFront ID: $CLOUDFRONT_ID"
+          echo "CloudFront URL: $CLOUDFRONT_URL"
 
       - name: Sincronizar archivos con S3
         run: |
@@ -105,7 +138,7 @@ jobs:
       - name: Mostrar URL de despliegue
         run: |
           echo "✅ Deploy completado exitosamente!"
-          echo "🌐 URL: https://d1uqyc0dzqbxs5.cloudfront.net"
+          echo "🌐 URL: ${{ steps.terraform-outputs.outputs.cloudfront_url }}"
 
   deploy-staging:
     name: Deploy a Staging
@@ -123,10 +156,40 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
-          cache: 'npm'
+
+      - name: Obtener caché de npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Limpiar node_modules y lockfiles de pnpm
+        run: |
+          rm -rf node_modules
+          rm -f pnpm-lock.yaml package-lock.json
 
       - name: Instalar dependencias
-        run: npm ci
+        run: npm install
+
+      - name: Configurar variables de entorno
+        run: |
+          # Crear archivo .env con las variables de entorno para staging
+          cat > .env << EOF
+          NODE_ENV=staging
+          OWNER_OPEN_ID=${{ secrets.OWNER_OPEN_ID || 'admin-local' }}
+          OWNER_NAME=${{ secrets.OWNER_NAME || 'Administrador' }}
+          VITE_APP_TITLE=${{ secrets.VITE_APP_TITLE || 'Sistema de Pedidos' }}
+          VITE_APP_LOGO=${{ secrets.VITE_APP_LOGO || '/logo.svg' }}
+          OAUTH_SERVER_URL=${{ secrets.OAUTH_SERVER_URL }}
+          VITE_APP_ID=${{ secrets.VITE_APP_ID }}
+          VITE_OAUTH_PORTAL_URL=${{ secrets.VITE_OAUTH_PORTAL_URL }}
+          OAUTH_CLIENT_SECRET=${{ secrets.OAUTH_CLIENT_SECRET }}
+          VITE_API_URL=${{ secrets.VITE_API_URL || 'http://localhost:3000' }}
+          EOF
+          echo "✅ Archivo .env creado para ambiente: staging"
+          echo "Variables configuradas (valores sensibles ocultos)"
 
       - name: Build aplicación
         run: npm run build
@@ -161,9 +224,11 @@ jobs:
           
           S3_BUCKET=$(terraform output -raw s3_bucket_name)
           CLOUDFRONT_ID=$(terraform output -raw cloudfront_distribution_id)
+          CLOUDFRONT_URL=$(terraform output -raw cloudfront_distribution_url)
           
           echo "bucket=$S3_BUCKET" >> $GITHUB_OUTPUT
           echo "cloudfront_id=$CLOUDFRONT_ID" >> $GITHUB_OUTPUT
+          echo "cloudfront_url=$CLOUDFRONT_URL" >> $GITHUB_OUTPUT
 
       - name: Sincronizar archivos con S3
         run: |
@@ -183,6 +248,11 @@ jobs:
             --distribution-id ${{ steps.terraform-outputs.outputs.cloudfront_id }} \
             --paths "/*"
 
+      - name: Mostrar URL de despliegue
+        run: |
+          echo "✅ Deploy completado exitosamente!"
+          echo "🌐 URL: ${{ steps.terraform-outputs.outputs.cloudfront_url }}"
+
   deploy-prod:
     name: Deploy a Producción
     if: |
@@ -199,10 +269,40 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
-          cache: 'npm'
+
+      - name: Obtener caché de npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Limpiar node_modules y lockfiles de pnpm
+        run: |
+          rm -rf node_modules
+          rm -f pnpm-lock.yaml package-lock.json
 
       - name: Instalar dependencias
-        run: npm ci
+        run: npm install
+
+      - name: Configurar variables de entorno
+        run: |
+          # Crear archivo .env con las variables de entorno para producción
+          cat > .env << EOF
+          NODE_ENV=production
+          OWNER_OPEN_ID=${{ secrets.OWNER_OPEN_ID || 'admin-local' }}
+          OWNER_NAME=${{ secrets.OWNER_NAME || 'Administrador' }}
+          VITE_APP_TITLE=${{ secrets.VITE_APP_TITLE || 'Sistema de Pedidos' }}
+          VITE_APP_LOGO=${{ secrets.VITE_APP_LOGO || '/logo.svg' }}
+          OAUTH_SERVER_URL=${{ secrets.OAUTH_SERVER_URL }}
+          VITE_APP_ID=${{ secrets.VITE_APP_ID }}
+          VITE_OAUTH_PORTAL_URL=${{ secrets.VITE_OAUTH_PORTAL_URL }}
+          OAUTH_CLIENT_SECRET=${{ secrets.OAUTH_CLIENT_SECRET }}
+          VITE_API_URL=${{ secrets.VITE_API_URL || 'http://localhost:3000' }}
+          EOF
+          echo "✅ Archivo .env creado para ambiente: production"
+          echo "Variables configuradas (valores sensibles ocultos)"
 
       - name: Build aplicación
         run: npm run build
@@ -237,9 +337,11 @@ jobs:
           
           S3_BUCKET=$(terraform output -raw s3_bucket_name)
           CLOUDFRONT_ID=$(terraform output -raw cloudfront_distribution_id)
+          CLOUDFRONT_URL=$(terraform output -raw cloudfront_distribution_url)
           
           echo "bucket=$S3_BUCKET" >> $GITHUB_OUTPUT
           echo "cloudfront_id=$CLOUDFRONT_ID" >> $GITHUB_OUTPUT
+          echo "cloudfront_url=$CLOUDFRONT_URL" >> $GITHUB_OUTPUT
 
       - name: Sincronizar archivos con S3
         run: |
@@ -258,3 +360,8 @@ jobs:
           aws cloudfront create-invalidation \
             --distribution-id ${{ steps.terraform-outputs.outputs.cloudfront_id }} \
             --paths "/*"
+
+      - name: Mostrar URL de despliegue
+        run: |
+          echo "✅ Deploy completado exitosamente!"
+          echo "🌐 URL: ${{ steps.terraform-outputs.outputs.cloudfront_url }}"

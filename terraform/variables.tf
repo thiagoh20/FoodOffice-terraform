@@ -62,3 +62,144 @@ variable "oidc_provider_arn" {
   type        = string
   default     = ""
 }
+
+# Variables para RDS
+variable "db_name" {
+  description = "Nombre de la base de datos"
+  type        = string
+  default     = "foodoffice"
+}
+
+variable "db_username" {
+  description = "Usuario maestro de la base de datos"
+  type        = string
+  default     = "foodoffice"
+}
+
+variable "db_password" {
+  description = "Contraseña maestra de la base de datos (sensible)"
+  type        = string
+  sensitive   = true
+}
+
+variable "db_instance_class" {
+  description = "Clase de instancia RDS (db.t3.micro para AWS Free Tier)"
+  type        = string
+  default     = "db.t3.micro"
+}
+
+variable "db_engine_version" {
+  description = "Versión del motor PostgreSQL"
+  type        = string
+  default     = "16.3"
+}
+
+variable "db_allocated_storage" {
+  description = "Almacenamiento inicial asignado en GB (20 GB máximo para AWS Free Tier)"
+  type        = number
+  default     = 20
+}
+
+variable "db_multi_az" {
+  description = "Habilitar despliegue Multi-AZ"
+  type        = bool
+  default     = false
+}
+
+variable "db_backup_retention_period" {
+  description = "Período de retención de backups en días (1 día para AWS Free Tier)"
+  type        = number
+  default     = 1
+}
+
+variable "db_backup_window" {
+  description = "Ventana de backup"
+  type        = string
+  default     = "03:00-04:00"
+}
+
+variable "db_maintenance_window" {
+  description = "Ventana de mantenimiento"
+  type        = string
+  default     = "mon:04:00-mon:05:00"
+}
+
+variable "db_skip_final_snapshot" {
+  description = "Omitir snapshot final al destruir (establecer en false en producción)"
+  type        = bool
+  default     = true
+}
+
+variable "db_deletion_protection" {
+  description = "Habilitar protección contra eliminación"
+  type        = bool
+  default     = false
+}
+
+variable "admin_cidr_blocks" {
+  description = "Bloques CIDR permitidos para acceso administrativo a RDS (opcional)"
+  type        = list(string)
+  default     = []
+}
+
+# Variables para el módulo VPC
+variable "vpc_cidr" {
+  description = "CIDR block para la VPC"
+  type        = string
+  default     = "10.0.0.0/16"
+}
+
+variable "public_subnet_cidrs" {
+  description = "Lista de bloques CIDR para subnets públicas"
+  type        = list(string)
+  default     = ["10.0.1.0/24", "10.0.2.0/24"]
+}
+
+variable "private_app_subnet_cidrs" {
+  description = "Lista de bloques CIDR para subnets privadas de aplicación (Lambda, ECS, etc.)"
+  type        = list(string)
+  default     = ["10.0.10.0/24", "10.0.20.0/24"]
+}
+
+variable "private_data_subnet_cidrs" {
+  description = "Lista de bloques CIDR para subnets privadas de datos (RDS, ElastiCache, etc.)"
+  type        = list(string)
+  default     = ["10.0.100.0/24", "10.0.200.0/24"]
+}
+
+variable "enable_nat_instance" {
+  description = "Habilitar NAT Instance para subnets privadas (t2.micro - gratis en Free Tier)"
+  type        = bool
+  default     = true
+}
+
+variable "nat_instance_type" {
+  description = "Tipo de instancia para NAT Instance (t2.micro para Free Tier)"
+  type        = string
+  default     = "t2.micro"
+}
+
+# Variables para Lambda - Comentadas porque Lambda se gestiona con SAM en otro repositorio
+# variable "lambda_handler" {
+#   description = "Handler de la función Lambda"
+#   type        = string
+#   default     = "index.handler"
+# }
+
+# variable "lambda_runtime" {
+#   description = "Runtime de la función Lambda"
+#   type        = string
+#   default     = "nodejs20.x"
+# }
+
+# variable "lambda_timeout" {
+#   description = "Timeout de la función Lambda en segundos"
+#   type        = number
+#   default     = 30
+# }
+
+# variable "lambda_zip_file" {
+#   description = "Ruta al archivo ZIP de Lambda (opcional, se puede usar código inline como placeholder)"
+#   type        = string
+#   default     = ""
+# }

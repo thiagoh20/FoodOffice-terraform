@@ -61,15 +61,105 @@ jobs:
           TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
           TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
           TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
+          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
 
-      - name: Terraform Apply
+      - name: Eliminar regla de seguridad duplicada (si existe)
         working-directory: ./terraform
-        run: terraform apply -auto-approve tfplan
+        continue-on-error: true
+        run: |
+          # Obtener IDs de Security Groups desde outputs de Terraform
+          LAMBDA_SG=$(terraform output -raw lambda_security_group_id 2>/dev/null || echo "sg-07387339b35fe5c83")
+          RDS_SG=$(terraform output -raw rds_security_group_id 2>/dev/null || echo "sg-05ab21fca371a7df5")
+          
+          echo "🔍 Verificando si existe regla duplicada..."
+          echo "Lambda SG: $LAMBDA_SG"
+          echo "RDS SG: $RDS_SG"
+          
+          # Verificar si la regla existe usando describe-security-groups
+          HAS_RULE=$(aws ec2 describe-security-groups \
+            --group-ids "${RDS_SG}" \
+            --query "SecurityGroups[0].IpPermissions[?FromPort==\`5432\` && ToPort==\`5432\` && IpProtocol==\`tcp\` && length(UserIdGroupPairs[?GroupId==\`${LAMBDA_SG}\`]) > \`0\`]" \
+            --output text 2>/dev/null || echo "")
+          
+          if [ -n "$HAS_RULE" ] && [ "$HAS_RULE" != "None" ]; then
+            echo "⚠️  Regla duplicada encontrada. Eliminándola para que Terraform la cree..."
+            
+            # Eliminar la regla usando revoke-security-group-ingress
+            aws ec2 revoke-security-group-ingress \
+              --group-id "${RDS_SG}" \
+              --protocol tcp \
+              --port 5432 \
+              --source-group "${LAMBDA_SG}" 2>&1 || {
+              echo "⚠️  No se pudo eliminar la regla. Puede que ya no exista o haya un problema de permisos."
+              exit 0
+            }
+            
+            echo "✅ Regla eliminada exitosamente. Terraform la creará de nuevo."
+          else
+            echo "✅ No se encontró regla duplicada. Terraform la creará normalmente."
+          fi
         env:
           TF_VAR_environment: dev
           TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
           TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
           TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
+          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
+
+      - name: Terraform Apply
+        id: terraform-apply
+        working-directory: ./terraform
+        continue-on-error: true
+        run: terraform apply -auto-approve tfplan 2>&1 | tee /tmp/apply-output.txt
+        env:
+          TF_VAR_environment: dev
+          TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
+          TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
+          TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
+          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
+
+      - name: Manejar error de regla duplicada (respaldo)
+        if: steps.terraform-apply.outcome == 'failure'
+        working-directory: ./terraform
+        continue-on-error: true
+        run: |
+          APPLY_OUTPUT=$(cat /tmp/apply-output.txt 2>/dev/null || echo "")
+          
+          if echo "$APPLY_OUTPUT" | grep -q "InvalidPermission.Duplicate"; then
+            echo "⚠️  Error de regla duplicada detectado. Eliminando regla existente..."
+            
+            # Obtener IDs de Security Groups
+            LAMBDA_SG=$(terraform output -raw lambda_security_group_id 2>/dev/null || echo "sg-07387339b35fe5c83")
+            RDS_SG=$(terraform output -raw rds_security_group_id 2>/dev/null || echo "sg-05ab21fca371a7df5")
+            
+            echo "Eliminando regla: Lambda SG $LAMBDA_SG -> RDS SG $RDS_SG (puerto 5432)"
+            
+            # Eliminar la regla
+            aws ec2 revoke-security-group-ingress \
+              --group-id "${RDS_SG}" \
+              --protocol tcp \
+              --port 5432 \
+              --source-group "${LAMBDA_SG}" 2>&1 || {
+              echo "⚠️  No se pudo eliminar la regla. Puede que ya no exista."
+            }
+            
+            echo "🔄 Re-ejecutando terraform apply..."
+            terraform apply -auto-approve tfplan || {
+              echo "❌ Error al re-ejecutar terraform apply"
+              exit 1
+            }
+            
+            echo "✅ Terraform apply completado exitosamente después de eliminar la regla duplicada"
+          else
+            echo "❌ Error diferente al de regla duplicada. Mostrando output:"
+            echo "$APPLY_OUTPUT"
+            exit 1
+          fi
+        env:
+          TF_VAR_environment: dev
+          TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
+          TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
+          TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
+          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
 
   destroy-development:
     if: inputs.action == 'destroy' && github.ref == 'refs/heads/develop'
@@ -107,165 +197,6 @@ jobs:
             -backend-config="dynamodb_table=terraform-state-lock" \
             -backend-config="encrypt=true"
 
-      - name: Buscar e importar recursos huérfanos
-        working-directory: ./terraform
-        run: |
-          echo "🔍 Buscando recursos huérfanos en AWS..."
-          
-          # 1. Buscar buckets S3 huérfanos (excluyendo el bucket del estado)
-          echo "📦 Buscando buckets S3..."
-          BUCKETS=$(aws s3api list-buckets --query "Buckets[?contains(Name, 'foodoffice-frontend') && Name != 'foodoffice-terraform-state'].Name" --output text 2>/dev/null || echo "")
-          
-          for BUCKET in $BUCKETS; do
-            # Excluir explícitamente el bucket del estado
-            if [ "$BUCKET" != "foodoffice-terraform-state" ]; then
-              echo "  - Bucket encontrado: $BUCKET"
-              # Verificar si está en el estado
-              if ! terraform state list 2>/dev/null | grep -q "module.foodoffice_frontend_bucket_name.aws_s3_bucket.frontend"; then
-                echo "    ⚠️ Bucket no está en el estado, importando..."
-                terraform import "module.foodoffice_frontend_bucket_name.aws_s3_bucket.frontend" "$BUCKET" 2>&1 || echo "    ❌ No se pudo importar el bucket"
-              else
-                echo "    ✅ Bucket ya está en el estado"
-              fi
-            fi
-          done
-          
-          # 2. Buscar OACs huérfanos
-          echo "🔐 Buscando Origin Access Controls..."
-          OAC_LIST=$(aws cloudfront list-origin-access-controls \
-            --query "OriginAccessControlList.Items[?contains(Name, 'foodoffice-frontend') && contains(Name, 'dev-oac')].{Id:Id, Name:Name}" \
-            --output json 2>/dev/null || echo '[]')
-          
-          OAC_COUNT=$(echo "$OAC_LIST" | python3 -c "import json, sys; data=json.load(sys.stdin); print(len(data))" 2>/dev/null || echo "0")
-          
-          if [ "$OAC_COUNT" -gt 0 ]; then
-            echo "  - Encontrados $OAC_COUNT OAC(s)"
-            for i in $(seq 0 $((OAC_COUNT - 1))); do
-              OAC_ID=$(echo "$OAC_LIST" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data[$i]['Id'] if $i < len(data) else '')" 2>/dev/null || echo "")
-              OAC_NAME=$(echo "$OAC_LIST" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data[$i]['Name'] if $i < len(data) else '')" 2>/dev/null || echo "")
-              
-              if [ -n "$OAC_ID" ] && [ "$OAC_ID" != "None" ]; then
-                echo "    - OAC: $OAC_NAME (ID: $OAC_ID)"
-                # Limpiar y validar el ID
-                OAC_ID=$(echo "$OAC_ID" | awk '{print $1}' | grep -oP '^E[A-Z0-9]{12,13}$' | head -1 || echo "")
-                
-                if [ -n "$OAC_ID" ]; then
-                  # Verificar si está en el estado
-                  if ! terraform state list 2>/dev/null | grep -q "module.foodoffice_frontend_cloudfront.aws_cloudfront_origin_access_control.s3_oac"; then
-                    echo "      ⚠️ OAC no está en el estado, importando..."
-                    terraform import "module.foodoffice_frontend_cloudfront.aws_cloudfront_origin_access_control.s3_oac" "$OAC_ID" 2>&1 || echo "      ❌ No se pudo importar el OAC"
-                  else
-                    echo "      ✅ OAC ya está en el estado"
-                  fi
-                fi
-              fi
-            done
-          fi
-          
-          # 3. Buscar distribuciones CloudFront huérfanos
-          echo "☁️ Buscando distribuciones CloudFront..."
-          DIST_LIST=$(aws cloudfront list-distributions \
-            --query "DistributionList.Items[?contains(Comment, 'FoodOffice') || contains(Origins.Items[0].DomainName, 'foodoffice-frontend')].{Id:Id, DomainName:Origins.Items[0].DomainName}" \
-            --output json 2>/dev/null || echo '[]')
-          
-          DIST_COUNT=$(echo "$DIST_LIST" | python3 -c "import json, sys; data=json.load(sys.stdin); print(len(data))" 2>/dev/null || echo "0")
-          
-          if [ "$DIST_COUNT" -gt 0 ]; then
-            echo "  - Encontradas $DIST_COUNT distribución(es)"
-            for i in $(seq 0 $((DIST_COUNT - 1))); do
-              DIST_ID=$(echo "$DIST_LIST" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data[$i]['Id'] if $i < len(data) else '')" 2>/dev/null || echo "")
-              DIST_DOMAIN=$(echo "$DIST_LIST" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data[$i]['DomainName'] if $i < len(data) else '')" 2>/dev/null || echo "")
-              
-              if [ -n "$DIST_ID" ] && [ "$DIST_ID" != "None" ]; then
-                echo "    - Distribución: $DIST_DOMAIN (ID: $DIST_ID)"
-                # Verificar si está en el estado
-                if ! terraform state list 2>/dev/null | grep -q "module.foodoffice_frontend_cloudfront.aws_cloudfront_distribution.frontend"; then
-                  echo "      ⚠️ Distribución no está en el estado, importando..."
-                  terraform import "module.foodoffice_frontend_cloudfront.aws_cloudfront_distribution.frontend" "$DIST_ID" 2>&1 || echo "      ❌ No se pudo importar la distribución"
-                else
-                  echo "      ✅ Distribución ya está en el estado"
-                fi
-              fi
-            done
-          fi
-          
-          # 4. Buscar roles IAM huérfanos (si existe el módulo IAM OIDC)
-          echo "👤 Buscando roles IAM..."
-          ROLE_LIST=$(aws iam list-roles \
-            --query "Roles[?contains(RoleName, 'github-actions') && contains(RoleName, 'foodoffice')].RoleName" \
-            --output text 2>/dev/null || echo "")
-          
-          if [ -n "$ROLE_LIST" ] && [ "$ROLE_LIST" != "None" ]; then
-            for ROLE_NAME in $ROLE_LIST; do
-              echo "    - Rol encontrado: $ROLE_NAME"
-              # Verificar si está en el estado
-              if ! terraform state list 2>/dev/null | grep -q "module.iam_oidc"; then
-                echo "      ⚠️ Rol no está en el estado, intentando importar..."
-                ROLE_ARN=$(aws iam get-role --role-name "$ROLE_NAME" --query 'Role.Arn' --output text 2>/dev/null || echo "")
-                if [ -n "$ROLE_ARN" ]; then
-                  terraform import "module.iam_oidc[0].aws_iam_role.github_actions" "$ROLE_NAME" 2>&1 || echo "      ❌ No se pudo importar el rol"
-                fi
-              else
-                echo "      ✅ Rol ya está en el estado"
-              fi
-            done
-          fi
-          
-          echo "✅ Búsqueda de recursos huérfanos completada"
-        env:
-          TF_VAR_environment: dev
-          TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
-          TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
-          TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
-        continue-on-error: true
-
-      - name: Vaciar bucket S3 antes de destroy
-        working-directory: ./terraform
-        run: |
-          # Obtener el bucket del estado
-          BUCKET_NAME=$(terraform output -raw s3_bucket_name 2>/dev/null || echo "")
-          
-          # Si no está en outputs, intentar obtenerlo del estado
-          if [ -z "$BUCKET_NAME" ]; then
-            BUCKET_NAME=$(terraform state show module.foodoffice_frontend_bucket_name.aws_s3_bucket.frontend 2>/dev/null | grep -oP 'id\s*=\s*"\K[^"]+' | head -1 || echo "")
-          fi
-          
-          # Si aún no lo tenemos, buscar en AWS (excluyendo el bucket del estado)
-          if [ -z "$BUCKET_NAME" ]; then
-            BUCKET_NAME=$(aws s3api list-buckets --query "Buckets[?contains(Name, 'foodoffice-frontend') && Name != 'foodoffice-terraform-state'].Name" --output text 2>/dev/null | head -1 || echo "")
-          fi
-          
-          # Asegurarse de que no es el bucket del estado
-          if [ "$BUCKET_NAME" = "foodoffice-terraform-state" ]; then
-            echo "⚠️ El bucket del estado no debe ser vaciado, saltando..."
-            BUCKET_NAME=""
-          fi
-          
-          if [ -n "$BUCKET_NAME" ] && [ "$BUCKET_NAME" != "None" ]; then
-            echo "🗑️ Vaciando bucket: $BUCKET_NAME"
-            
-            # Eliminar todos los objetos primero
-            aws s3 rm "s3://$BUCKET_NAME/" --recursive || echo "No hay objetos para eliminar"
-            echo "Eliminando versiones del bucket..."
-            while true; do
-              VERSIONS=$(aws s3api list-object-versions --bucket "$BUCKET_NAME" \
-                --query='{Objects: Versions[].{Key:Key,VersionId:VersionId}, DeleteMarkers: DeleteMarkers[].{Key:Key,VersionId:VersionId}}' \
-                --output json 2>/dev/null || echo '{"Objects":[],"DeleteMarkers":[]}')
-              ALL_OBJECTS=$(echo "$VERSIONS" | python3 -c "import sys, json; data = json.load(sys.stdin); objs = []; objs.extend(data.get('Objects', [])); objs.extend(data.get('DeleteMarkers', [])); print(json.dumps({'Objects': objs}) if objs else '{\"Objects\":[]}')")
-              if [ "$ALL_OBJECTS" != '{"Objects":[]}' ] && [ -n "$ALL_OBJECTS" ]; then
-                echo "$ALL_OBJECTS" > /tmp/delete.json
-                aws s3api delete-objects --bucket "$BUCKET_NAME" --delete file:///tmp/delete.json || break
-                echo "  Eliminando versiones..."
-              else
-                break
-              fi
-            done
-            echo "✅ Bucket vaciado exitosamente"
-          else
-            echo "ℹ️ No se encontró bucket para vaciar"
-          fi
-        continue-on-error: true
-
       - name: Terraform Destroy
         working-directory: ./terraform
         run: terraform destroy -auto-approve
@@ -274,3 +205,4 @@ jobs:
           TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
           TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
           TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
+          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}

@@ -26,6 +26,7 @@ Thumbs.db
 # ============================================
 # Dependencies
 node_modules/
+# package-lock.json - Mantener en repo para CI/CD
 .pnp
 .pnp.js
 .yarn/cache
