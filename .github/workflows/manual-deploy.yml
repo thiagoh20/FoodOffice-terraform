@@ -43,6 +43,35 @@ jobs:
         run: |
           git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
+      - name: Limpiar Digest del lock en DynamoDB (preventivo)
+        working-directory: ./
+        run: |
+          echo "🔧 Limpiando Digest del lock en DynamoDB como medida preventiva..."
+          LOCK_ID="foodoffice-terraform-state/environments/dev/terraform.tfstate"
+          
+          # Verificar si existe el lock
+          LOCK_EXISTS=$(aws dynamodb get-item \
+            --table-name terraform-state-lock \
+            --key "{\"LockID\": {\"S\": \"${LOCK_ID}\"}}" \
+            --region us-east-2 \
+            --query 'Item' \
+            --output text 2>/dev/null || echo "None")
+          
+          if [ "$LOCK_EXISTS" != "None" ] && [ -n "$LOCK_EXISTS" ]; then
+            echo "🗑️ Eliminando Digest del lock existente..."
+            aws dynamodb update-item \
+              --table-name terraform-state-lock \
+              --key "{\"LockID\": {\"S\": \"${LOCK_ID}\"}}" \
+              --update-expression "REMOVE Digest" \
+              --region us-east-2 2>&1 || {
+              echo "⚠️ No se pudo eliminar el Digest (puede que no exista). Continuando..."
+            }
+            echo "✅ Digest limpiado"
+          else
+            echo "ℹ️ No hay lock existente. Continuando normalmente..."
+          fi
+        continue-on-error: true
+
       - name: Terraform Init
         id: terraform-init
         working-directory: ./terraform
@@ -67,24 +96,29 @@ jobs:
         run: |
           INIT_OUTPUT=$(cat /tmp/init-output.txt 2>/dev/null || echo "")
           
-          # Verificar si el error es de checksum
-          if echo "$INIT_OUTPUT" | grep -q "checksum\|state data in S3 does not have the expected content"; then
+          echo "📋 Output del terraform init:"
+          echo "$INIT_OUTPUT"
+          echo ""
+          
+          # Verificar si el error es de checksum (múltiples patrones)
+          if echo "$INIT_OUTPUT" | grep -qiE "checksum|state data in S3 does not have the expected content|Calculated checksum|Stored checksum"; then
             echo "🔧 Error de checksum detectado. Reparando automáticamente..."
             
             # Eliminar el Digest del lock en DynamoDB (solución automática)
             LOCK_ID="foodoffice-terraform-state/environments/dev/terraform.tfstate"
             echo "🗑️ Eliminando Digest del lock en DynamoDB..."
             
+            # Intentar eliminar el Digest
             aws dynamodb update-item \
               --table-name terraform-state-lock \
               --key "{\"LockID\": {\"S\": \"${LOCK_ID}\"}}" \
               --update-expression "REMOVE Digest" \
-              --region us-east-2 || {
+              --region us-east-2 2>&1 || {
               echo "⚠️ No se pudo eliminar el Digest. Intentando eliminar el lock completo..."
               aws dynamodb delete-item \
                 --table-name terraform-state-lock \
                 --key "{\"LockID\": {\"S\": \"${LOCK_ID}\"}}" \
-                --region us-east-2 || echo "⚠️ No se pudo eliminar el lock"
+                --region us-east-2 2>&1 || echo "⚠️ No se pudo eliminar el lock"
             }
             
             echo "✅ Checksum reparado. Reintentando terraform init..."
@@ -96,12 +130,19 @@ jobs:
               -backend-config="dynamodb_table=terraform-state-lock" \
               -backend-config="encrypt=true" \
               -reconfigure
+            
+            if [ $? -eq 0 ]; then
+              echo "✅ Terraform init exitoso después de reparar checksum"
+            else
+              echo "❌ Terraform init aún falla después de reparar. Verifica el estado manualmente."
+              exit 1
+            fi
           else
-            echo "❌ Error diferente al de checksum. Mostrando output:"
+            echo "❌ Error diferente al de checksum. Mostrando output completo:"
             echo "$INIT_OUTPUT"
             exit 1
           fi
-        continue-on-error: true
+        continue-on-error: false
         env:
           TF_VAR_environment: dev
           TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
