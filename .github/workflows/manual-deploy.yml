@@ -43,45 +43,54 @@ jobs:
         run: |
           git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
-      - name: Limpiar lock en DynamoDB si el estado no existe en S3
+      - name: Crear estado inicial si no existe en S3
         working-directory: ./
         run: |
-          echo "🔍 Verificando si el estado existe en S3..."
+          echo "🔍 Verificando si existe terraform.tfstate en S3..."
           LOCK_ID="foodoffice-terraform-state/environments/dev/terraform.tfstate"
           STATE_KEY="environments/dev/terraform.tfstate"
+          BUCKET_NAME="foodoffice-terraform-state"
+          BACKEND_REGION="us-east-2"
           
-          # Verificar si existe el estado en S3
-          if aws s3 ls "s3://foodoffice-terraform-state/${STATE_KEY}" --region us-east-2 &> /dev/null; then
-            echo "✅ Estado encontrado en S3"
+          # Verificar si existe el archivo terraform.tfstate en S3
+          if aws s3 ls "s3://${BUCKET_NAME}/${STATE_KEY}" --region "${BACKEND_REGION}" &> /dev/null; then
+            echo "✅ Estado terraform.tfstate encontrado en S3"
             
-            # Si existe el estado, solo limpiar el Digest del lock
-            LOCK_EXISTS=$(aws dynamodb get-item \
+            # Si existe el estado, solo limpiar el Digest del lock para evitar errores de checksum
+            echo "🗑️ Limpiando Digest del lock para evitar errores de checksum..."
+            aws dynamodb update-item \
               --table-name terraform-state-lock \
               --key "{\"LockID\": {\"S\": \"${LOCK_ID}\"}}" \
-              --region us-east-2 \
-              --query 'Item' \
-              --output text 2>/dev/null || echo "None")
-            
-            if [ "$LOCK_EXISTS" != "None" ] && [ -n "$LOCK_EXISTS" ]; then
-              echo "🗑️ Eliminando Digest del lock existente..."
-              aws dynamodb update-item \
-                --table-name terraform-state-lock \
-                --key "{\"LockID\": {\"S\": \"${LOCK_ID}\"}}" \
-                --update-expression "REMOVE Digest" \
-                --region us-east-2 2>&1 || echo "⚠️ No se pudo eliminar el Digest"
-              echo "✅ Digest limpiado"
-            fi
+              --update-expression "REMOVE Digest" \
+              --region "${BACKEND_REGION}" 2>&1 || echo "⚠️ No se pudo eliminar el Digest (puede que no exista el lock)"
+            echo "✅ Digest limpiado (si existía)"
           else
-            echo "⚠️ Estado NO encontrado en S3 (bucket vacío o estado borrado)"
-            echo "🗑️ Eliminando lock completo de DynamoDB ya que no hay estado en S3..."
+            echo "⚠️ Estado terraform.tfstate NO encontrado en S3"
+            echo "   El bucket está vacío. Creando estado inicial..."
+            echo ""
             
-            # Eliminar el lock completo si no hay estado
+            # Eliminar lock si existe
+            echo "🗑️ Eliminando lock de DynamoDB si existe..."
             aws dynamodb delete-item \
               --table-name terraform-state-lock \
               --key "{\"LockID\": {\"S\": \"${LOCK_ID}\"}}" \
-              --region us-east-2 2>&1 || echo "⚠️ No se pudo eliminar el lock (puede que no exista)"
+              --region "${BACKEND_REGION}" 2>&1 || echo "ℹ️ No hay lock para eliminar"
             
-            echo "✅ Lock eliminado. Terraform creará un estado nuevo."
+            # Crear estado inicial vacío
+            echo "📝 Creando estado inicial vacío en S3..."
+            INITIAL_STATE='{"version":4,"terraform_version":"1.13.4","serial":1,"lineage":"'$(openssl rand -hex 16)'","outputs":{},"resources":[]}'
+            
+            echo "$INITIAL_STATE" | aws s3 cp - \
+              "s3://${BUCKET_NAME}/${STATE_KEY}" \
+              --region "${BACKEND_REGION}" \
+              --content-type "application/json" \
+              --metadata "terraform-state=initial"
+            
+            if [ $? -eq 0 ]; then
+              echo "✅ Estado inicial creado exitosamente en S3"
+            else
+              echo "⚠️ Error al crear estado inicial. Terraform lo creará automáticamente."
+            fi
           fi
         continue-on-error: true
 
