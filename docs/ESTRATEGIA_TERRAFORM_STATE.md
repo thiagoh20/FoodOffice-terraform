@@ -12,10 +12,6 @@
 
 ---
 
-
-
-
-
 ## 🏗️ Arquitectura del Backend
 
 ### Arquitectura Híbrida: S3 + DynamoDB
