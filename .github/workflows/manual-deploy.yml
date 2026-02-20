@@ -197,6 +197,16 @@ jobs:
             -backend-config="dynamodb_table=terraform-state-lock" \
             -backend-config="encrypt=true"
 
+      - name: Limpiar ENIs de Lambda antes de destroy
+        working-directory: ./
+        run: |
+          echo "🧹 Limpiando ENIs de Lambda antes de terraform destroy..."
+          chmod +x scripts/cleanup-lambda-enis.sh
+          ./scripts/cleanup-lambda-enis.sh
+        continue-on-error: true
+        env:
+          AWS_REGION: us-east-1
+
       - name: Terraform Destroy
         working-directory: ./terraform
         run: terraform destroy -auto-approve
