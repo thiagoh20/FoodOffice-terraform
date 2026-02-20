@@ -52,6 +52,35 @@ Este repositorio contiene:
 | **IAM Role (OIDC)** | Autenticación sin credenciales para GitHub Actions | `terraform-modules/iam-oidc` |
 
 ---
+```mermaid
+graph TD
+
+    subgraph GitHub_Actions ["GitHub Repository"]
+        GA[GitHub Action Workflow]
+    end
+
+    subgraph AWS_Cloud ["AWS Cloud (us-east-1)"]
+        subgraph IAM_Layer ["Security & Identity"]
+            OIDC[IAM OIDC Provider: GitHub]
+            Role[IAM Role: GitHub Actions]
+            OIDC -->|Confianza| Role
+        end
+
+        subgraph Frontend_Layer ["Frontend Delivery"]
+            S3[S3 Bucket: foodoffice-frontend-prod]
+            CF[CloudFront Distribution]
+            OAC[Origin Access Control]
+            CF -->|Acceso Seguro| OAC
+            OAC -->|Solo lectura| S3
+        end
+    end
+
+    GA -->|Assume Role via OIDC| Role
+    Role -->|Deploy/Invalidate| S3
+    Role -->|Invalidate Cache| CF
+    User((Usuario Final)) -->|HTTPS| CF
+```
+
 
 
 ## ☁️ Infraestructura con Terraform
@@ -442,18 +471,7 @@ Ejemplos:
 - `docs(readme): actualizar instrucciones de instalación`
 
 Ver [ESTRATEGIA_GIT.md](docs/ESTRATEGIA_GIT.md) para más detalles.
-
----
-
-## 📝 Licencia
-
-MIT
-
----
-
-## 👥 Equipo
-
-**Mantenedores**: Equipo de Desarrollo FoodOffice
+Ver [ESTRATEGIA_TERRAFORM_STATE.md](docs/ESTRATEGIA_TERRAFORM_STATE.md) para más detalles.
 
 ---
 
@@ -466,5 +484,3 @@ MIT
 - [GitHub Actions](https://docs.github.com/en/actions)
 
 ---
-
-**Última actualización**: 2024
