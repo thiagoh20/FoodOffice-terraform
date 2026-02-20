@@ -197,6 +197,23 @@ jobs:
             -backend-config="dynamodb_table=terraform-state-lock" \
             -backend-config="encrypt=true"
 
+      - name: Importar recursos huérfanos al Terraform state
+        working-directory: ./
+        run: |
+          echo "🔍 Buscando e importando recursos huérfanos al Terraform state..."
+          chmod +x scripts/cleanup-orphaned-resources.sh
+          ./scripts/cleanup-orphaned-resources.sh
+        continue-on-error: true
+        env:
+          AWS_REGION: us-east-1
+          PROJECT_NAME: foodoffice
+          ENVIRONMENT: dev
+          TERRAFORM_DIR: terraform
+          BACKEND_BUCKET: foodoffice-terraform-state
+          BACKEND_KEY: environments/dev/terraform.tfstate
+          BACKEND_REGION: us-east-2
+          BACKEND_DYNAMODB: terraform-state-lock
+
       - name: Limpiar ENIs de Lambda antes de destroy
         working-directory: ./
         run: |
