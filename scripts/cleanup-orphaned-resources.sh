@@ -131,9 +131,11 @@ if [ -n "$SG_IDS" ]; then
     if [ -n "$SG_ID" ]; then
       echo "  📌 Security Group encontrado: $SG_ID"
       
-      # Verificar si ya está en el state
+      # Verificar si ya está en el state (buscando por ID en los outputs)
       STATE_LIST=$(terraform state list 2>/dev/null || echo "")
-      if echo "$STATE_LIST" | grep -q "$SG_ID"; then
+      # Buscar el SG en el state por ID o por nombre del recurso
+      if echo "$STATE_LIST" | grep -q "aws_security_group" && \
+         terraform state show "$(echo "$STATE_LIST" | grep "aws_security_group" | grep -E "(lambda|rds)")" 2>/dev/null | grep -q "$SG_ID"; then
         echo "  ✅ Ya está en el Terraform state"
         continue
       fi
@@ -153,55 +155,62 @@ if [ -n "$SG_IDS" ]; then
       IMPORTED=false
       if echo "$SG_NAME" | grep -qi "lambda"; then
         echo "  🔄 Intentando importar como Lambda Security Group..."
-        echo "     Comando: terraform import module.rds_security_groups.aws_security_group.lambda $SG_ID"
         
-        # Usar timeout y redirigir stderr también
-        timeout 30 bash -c "terraform import \
-          -var='environment=$ENVIRONMENT' \
-          -var='project_name=$PROJECT_NAME' \
-          'module.rds_security_groups.aws_security_group.lambda' '$SG_ID' 2>&1" > /tmp/import-output.log 2>&1
+        # Usar -lock=false para evitar problemas de lock durante imports rápidos
+        timeout 30 terraform import \
+          -lock=false \
+          -var="environment=$ENVIRONMENT" \
+          -var="project_name=$PROJECT_NAME" \
+          "module.rds_security_groups.aws_security_group.lambda" "$SG_ID" > /tmp/import-output.log 2>&1
         
         IMPORT_EXIT=$?
         if [ $IMPORT_EXIT -eq 0 ]; then
           echo "  ✅ Security Group Lambda importado"
           IMPORTED=true
         elif [ $IMPORT_EXIT -eq 124 ]; then
-          echo "  ⏱️  Timeout al importar (puede que el módulo esté descargándose)"
+          echo "  ⏱️  Timeout al importar"
         else
-          echo "  ⚠️  No se pudo importar como Lambda SG"
-          grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | tail -5
+          # Verificar si el error es porque ya existe
+          if grep -qi "already managed\|Resource already managed" /tmp/import-output.log; then
+            echo "  ✅ Ya está en el Terraform state"
+            IMPORTED=true
+          else
+            echo "  ⚠️  No se pudo importar como Lambda SG"
+            grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | grep -i "error\|cannot" | head -3
+          fi
         fi
       fi
       
       if [ "$IMPORTED" = false ] && echo "$SG_NAME" | grep -qi "rds"; then
         echo "  🔄 Intentando importar como RDS Security Group..."
-        echo "     Comando: terraform import module.rds_security_groups.aws_security_group.rds $SG_ID"
         
-        timeout 30 bash -c "terraform import \
-          -var='environment=$ENVIRONMENT' \
-          -var='project_name=$PROJECT_NAME' \
-          'module.rds_security_groups.aws_security_group.rds' '$SG_ID' 2>&1" > /tmp/import-output.log 2>&1
+        timeout 30 terraform import \
+          -lock=false \
+          -var="environment=$ENVIRONMENT" \
+          -var="project_name=$PROJECT_NAME" \
+          "module.rds_security_groups.aws_security_group.rds" "$SG_ID" > /tmp/import-output.log 2>&1
         
         IMPORT_EXIT=$?
         if [ $IMPORT_EXIT -eq 0 ]; then
           echo "  ✅ Security Group RDS importado"
           IMPORTED=true
         elif [ $IMPORT_EXIT -eq 124 ]; then
-          echo "  ⏱️  Timeout al importar (puede que el módulo esté descargándose)"
+          echo "  ⏱️  Timeout al importar"
         else
-          echo "  ⚠️  No se pudo importar como RDS SG"
-          grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | tail -5
+          # Verificar si el error es porque ya existe
+          if grep -qi "already managed\|Resource already managed" /tmp/import-output.log; then
+            echo "  ✅ Ya está en el Terraform state"
+            IMPORTED=true
+          else
+            echo "  ⚠️  No se pudo importar como RDS SG"
+            grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | grep -i "error\|cannot" | head -3
+          fi
         fi
       fi
       
-      if [ "$IMPORTED" = false ]; then
-        echo "  ⚠️  No se pudo importar $SG_ID"
-        echo "  💡 Puedes importarlo manualmente con:"
-        if echo "$SG_NAME" | grep -qi "lambda"; then
-          echo "     terraform import -var='environment=$ENVIRONMENT' module.rds_security_groups.aws_security_group.lambda $SG_ID"
-        elif echo "$SG_NAME" | grep -qi "rds"; then
-          echo "     terraform import -var='environment=$ENVIRONMENT' module.rds_security_groups.aws_security_group.rds $SG_ID"
-        fi
+      if [ "$IMPORTED" = false ] && [ -n "$SG_NAME" ]; then
+        echo "  ⚠️  No se pudo importar $SG_ID (nombre: $SG_NAME)"
+        echo "  💡 Este Security Group no coincide con los recursos definidos en Terraform"
       fi
     fi
   done
@@ -275,41 +284,54 @@ if [ -n "$SUBNET_IDS" ]; then
       IMPORTED=false
       if [ "$SUBNET_TYPE" = "public" ]; then
         timeout 30 terraform import \
+          -lock=false \
           -var="environment=$ENVIRONMENT" \
           -var="project_name=$PROJECT_NAME" \
           "module.vpc.aws_subnet.public[0]" "$SUBNET_ID" > /tmp/import-output.log 2>&1
         if [ $? -eq 0 ]; then
           echo "  ✅ Subnet pública importada"
           IMPORTED=true
+        elif grep -qi "already managed\|Resource already managed" /tmp/import-output.log; then
+          echo "  ✅ Ya está en el Terraform state"
+          IMPORTED=true
         else
-          cat /tmp/import-output.log | grep -v "Warning" | tail -3
+          grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | grep -i "error\|cannot" | head -3
         fi
       elif [ "$SUBNET_TYPE" = "private-app" ]; then
         timeout 30 terraform import \
+          -lock=false \
           -var="environment=$ENVIRONMENT" \
           -var="project_name=$PROJECT_NAME" \
           "module.vpc.aws_subnet.private_app[0]" "$SUBNET_ID" > /tmp/import-output.log 2>&1
         if [ $? -eq 0 ]; then
           echo "  ✅ Subnet privada de app importada"
           IMPORTED=true
+        elif grep -qi "already managed\|Resource already managed" /tmp/import-output.log; then
+          echo "  ✅ Ya está en el Terraform state"
+          IMPORTED=true
         else
-          cat /tmp/import-output.log | grep -v "Warning" | tail -3
+          grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | grep -i "error\|cannot" | head -3
         fi
       elif [ "$SUBNET_TYPE" = "private-data" ]; then
         timeout 30 terraform import \
+          -lock=false \
           -var="environment=$ENVIRONMENT" \
           -var="project_name=$PROJECT_NAME" \
           "module.vpc.aws_subnet.private_data[0]" "$SUBNET_ID" > /tmp/import-output.log 2>&1
         if [ $? -eq 0 ]; then
           echo "  ✅ Subnet privada de datos importada"
           IMPORTED=true
+        elif grep -qi "already managed\|Resource already managed" /tmp/import-output.log; then
+          echo "  ✅ Ya está en el Terraform state"
+          IMPORTED=true
         else
-          cat /tmp/import-output.log | grep -v "Warning" | tail -3
+          grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | grep -i "error\|cannot" | head -3
         fi
       fi
       
       if [ "$IMPORTED" = false ]; then
         echo "  ⚠️  No se pudo importar $SUBNET_ID (tipo: $SUBNET_TYPE)"
+        echo "  💡 Puede que el índice [0] no sea correcto, o la subnet ya esté importada con otro índice"
       fi
     fi
   done
@@ -338,6 +360,7 @@ if [ -n "$VPC_IDS" ]; then
       fi
       
       timeout 30 terraform import \
+        -lock=false \
         -var="environment=$ENVIRONMENT" \
         -var="project_name=$PROJECT_NAME" \
         "module.vpc.aws_vpc.main" "$VPC_ID" > /tmp/import-output.log 2>&1
@@ -345,8 +368,12 @@ if [ -n "$VPC_IDS" ]; then
       if [ $? -eq 0 ]; then
         echo "  ✅ VPC importada"
       else
-        echo "  ⚠️  No se pudo importar $VPC_ID"
-        cat /tmp/import-output.log | grep -v "Warning" | tail -3
+        if grep -qi "already managed\|Resource already managed" /tmp/import-output.log; then
+          echo "  ✅ Ya está en el Terraform state"
+        else
+          echo "  ⚠️  No se pudo importar $VPC_ID"
+          grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | grep -i "error\|cannot" | head -3
+        fi
       fi
     fi
   done
@@ -374,6 +401,7 @@ if [ -n "$RDS_IDS" ]; then
       fi
       
       timeout 60 terraform import \
+        -lock=false \
         -var="environment=$ENVIRONMENT" \
         -var="project_name=$PROJECT_NAME" \
         "module.rds.aws_db_instance.main" "$RDS_ID" > /tmp/import-output.log 2>&1
@@ -381,8 +409,12 @@ if [ -n "$RDS_IDS" ]; then
       if [ $? -eq 0 ]; then
         echo "  ✅ RDS importado"
       else
-        echo "  ⚠️  No se pudo importar $RDS_ID"
-        cat /tmp/import-output.log | grep -v "Warning" | tail -3
+        if grep -qi "already managed\|Resource already managed" /tmp/import-output.log; then
+          echo "  ✅ Ya está en el Terraform state"
+        else
+          echo "  ⚠️  No se pudo importar $RDS_ID"
+          grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | grep -i "error\|cannot" | head -3
+        fi
       fi
     fi
   done
@@ -410,6 +442,7 @@ if [ -n "$BUCKET_NAMES" ]; then
       fi
       
       timeout 30 terraform import \
+        -lock=false \
         -var="environment=$ENVIRONMENT" \
         -var="project_name=$PROJECT_NAME" \
         "module.foodoffice_frontend_bucket_name.aws_s3_bucket.main" "$BUCKET_NAME" > /tmp/import-output.log 2>&1
@@ -417,8 +450,12 @@ if [ -n "$BUCKET_NAMES" ]; then
       if [ $? -eq 0 ]; then
         echo "  ✅ Bucket importado"
       else
-        echo "  ⚠️  No se pudo importar $BUCKET_NAME"
-        cat /tmp/import-output.log | grep -v "Warning" | tail -3
+        if grep -qi "already managed\|Resource already managed" /tmp/import-output.log; then
+          echo "  ✅ Ya está en el Terraform state"
+        else
+          echo "  ⚠️  No se pudo importar $BUCKET_NAME"
+          grep -v "Warning\|Downloading\|Installing" /tmp/import-output.log | grep -i "error\|cannot" | head -3
+        fi
       fi
     fi
   done
