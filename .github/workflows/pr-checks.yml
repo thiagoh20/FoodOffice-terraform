@@ -95,10 +95,108 @@ jobs:
           echo "Para ver más detalles, ejecuta \`npm run test\` localmente." >> $GITHUB_STEP_SUMMARY
 
 
+  infracost:
+    name: Análisis de Costos con Infracost
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.4
+
+      - name: Configure Git credentials for private modules
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
+      - name: Setup Infracost
+        uses: infracost/actions/setup@v1
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY || '' }}
+
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: |
+          terraform init \
+            -backend-config="bucket=foodoffice-terraform-state" \
+            -backend-config="key=environments/dev/terraform.tfstate" \
+            -backend-config="region=us-east-2" \
+            -backend-config="dynamodb_table=terraform-state-lock" \
+            -backend-config="encrypt=true"
+        continue-on-error: true
+
+      - name: Generar Terraform Plan JSON
+        id: plan
+        working-directory: ./terraform
+        run: |
+          terraform plan \
+            -out=tfplan.binary \
+            -var="environment=dev" \
+            -var="bucket_name=${{ secrets.TF_VAR_BUCKET_NAME }}" \
+            -var="github_repository=${{ secrets.TF_VAR_GITHUB_REPOSITORY }}" \
+            -var="oidc_provider_arn=${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}" \
+            -var="db_password=${{ secrets.TF_VAR_DB_PASSWORD }}" || true
+          
+          terraform show -json tfplan.binary > plan.json || echo "{}" > plan.json
+        continue-on-error: true
+
+      - name: Generar reporte de costos con Infracost
+        id: infracost
+        working-directory: ./terraform
+        run: |
+          infracost breakdown \
+            --path plan.json \
+            --format json \
+            --out-file infracost.json || echo "{}" > infracost.json
+          
+          infracost breakdown \
+            --path plan.json \
+            --format table \
+            --out-file infracost-table.txt || echo "No se pudo generar el reporte de costos" > infracost-table.txt
+        continue-on-error: true
+
+      - name: Publicar comentario en PR con reporte de costos
+        uses: infracost/actions/comment@v1
+        if: github.event_name == 'pull_request'
+        with:
+          path: ./terraform/infracost.json
+          format: table
+          behavior: update
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Mostrar resumen de costos
+        if: always()
+        working-directory: ./terraform
+        run: |
+          echo "## 💰 Análisis de Costos con Infracost" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f infracost-table.txt ]; then
+            cat infracost-table.txt >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ No se pudo generar el reporte de costos. Verifica que Terraform plan se haya ejecutado correctamente." >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📊 El reporte completo se ha publicado como comentario en el PR." >> $GITHUB_STEP_SUMMARY
+
   pr-summary:
     name: PR Summary
     runs-on: ubuntu-latest
-    needs: [lint-frontend, test-frontend]
+    needs: [lint-frontend, test-frontend, infracost]
     if: always()
     
     steps:
@@ -110,6 +208,7 @@ jobs:
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Lint Frontend | ${{ needs.lint-frontend.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Test Frontend | ${{ needs.test-frontend.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Análisis de Costos (Infracost) | ${{ needs.infracost.result }} |" >> $GITHUB_STEP_SUMMARY
           
           if [ "${{ needs.lint-frontend.result }}" != "success" ] || \
              [ "${{ needs.test-frontend.result }}" != "success" ]; then
