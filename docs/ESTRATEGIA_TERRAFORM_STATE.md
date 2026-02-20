@@ -67,30 +67,8 @@ backend "s3" {
 
 ### Organización por Ambientes
 
-El estado se organiza en S3 usando la siguiente estructura:
 
-```
-foodoffice-terraform-state/
-├── environments/
-│   ├── dev/
-│   │   └── terraform.tfstate
-│   ├── staging/
-│   │   └── terraform.tfstate
-│   └── prod/
-│       └── terraform.tfstate
-├── modules/
-│   └── [estados de módulos si se usan workspaces]
-└── shared/
-    └── [recursos compartidos entre ambientes]
-```
 
-### Convención de Nombres
-
-- **Formato**: `environments/{ENVIRONMENT}/terraform.tfstate`
-- **Ejemplos**:
-  - `environments/dev/terraform.tfstate`
-  - `environments/staging/terraform.tfstate`
-  - `environments/prod/terraform.tfstate`
 
 ### Ventajas de esta Estructura
 
@@ -221,7 +199,6 @@ aws dynamodb delete-item \
 | Ambiente | Branch | State Key | Propósito |
 |----------|--------|-----------|-----------|
 | **dev** | `develop` | `environments/dev/terraform.tfstate` | Desarrollo activo |
-| **staging** | `staging` | `environments/staging/terraform.tfstate` | Pre-producción |
 | **prod** | `main` | `environments/prod/terraform.tfstate` | Producción |
 
 ### Inicialización por Ambiente
@@ -439,22 +416,8 @@ Antes de hacer merge, revisar cambios en el state:
 terraform plan  # Muestra cambios propuestos
 ```
 
-### 5. Backup Antes de Cambios Importantes
 
-```bash
-# Antes de apply importante
-terraform state pull > backup-$(date +%Y%m%d).tfstate
-```
-
-### 6. Limpiar Recursos Huérfanos
-
-Si un recurso existe en AWS pero no en el state:
-
-```bash
-terraform import aws_instance.example i-1234567890abcdef0
-```
-
-### 7. State Outputs
+### 5. State Outputs
 
 Usar outputs para compartir información entre módulos:
 
@@ -498,26 +461,6 @@ terraform init -reconfigure
 
 **Síntoma**: Terraform quiere destruir recursos que existen
 
-**Solución**:
-```bash
-# 1. Verificar estado actual
-terraform show
-
-# 2. Refrescar estado desde AWS
-terraform refresh
-
-# 3. Si persiste, importar recursos faltantes
-terraform import <resource_type>.<name> <resource_id>
-```
-
-### Migrar State entre Ambientes
-
-```bash
-# 1. Inicializar con nuevo backend
-terraform init -migrate-state
-
-# 2. Confirmar migración cuando se solicite
-```
 
 ---
 
@@ -585,27 +528,3 @@ Con **PAY_PER_REQUEST** (on-demand), los costos son muy bajos:
 - [AWS S3 Best Practices](https://docs.aws.amazon.com/AmazonS3/latest/userguide/security-best-practices.html)
 
 ---
-
-## ❓ Preguntas Frecuentes
-
-**P: ¿Puedo tener múltiples estados en el mismo bucket?**
-R: Sí, usando diferentes keys. Cada ambiente debe tener su propia key.
-
-**P: ¿Qué pasa si elimino el state file por accidente?**
-R: Si tienes versionado habilitado, puedes restaurar. Si no, necesitarás importar todos los recursos manualmente.
-
-**P: ¿Puedo compartir state entre proyectos?**
-R: No recomendado. Cada proyecto debe tener su propio state para aislamiento.
-
-**P: ¿Cómo manejar state en desarrollo local?**
-R: Usar el mismo backend remoto, pero con key de dev. Nunca usar estado local.
-
-**P: ¿Qué hacer si el state está corrupto?**
-R: Restaurar desde backup o versión anterior en S3. Si no hay backup, importar recursos manualmente.
-
----
-
-**Última actualización**: 2024  
-**Mantenedor**: Equipo de DevOps FoodOffice  
-**Bucket S3**: `foodoffice-terraform-state`  
-**Región**: `us-east-2`
