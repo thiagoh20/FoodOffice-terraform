@@ -153,9 +153,3 @@ module "rds" {
     Owner       = "backend"
   })
 }
-
-# --- OUTPUTS PARA CONEXIÓN ---
-output "rds_endpoint" {
-  description = "Copia este endpoint en DBeaver/pgAdmin"
-  value       = module.rds.db_instance_endpoint
-}
