@@ -126,7 +126,7 @@ module "rds" {
   subnet_ids           = module.vpc.public_subnet_ids  
 
   # CAMBIO: Obligatorio para recibir una IP pública de AWS
-  publicly_accessible  = true
+  db_publicly_accessible = true
 
   db_name     = var.db_name
   db_username = var.db_username
