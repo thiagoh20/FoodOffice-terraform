@@ -101,7 +101,10 @@ module "rds_security_groups" {
   project_name      = var.project_name
   environment       = var.environment
   vpc_id            = module.vpc.vpc_id
-  admin_cidr_blocks = var.admin_cidr_blocks
+  
+  # CAMBIO: Tu IP pública IPv4 para acceso administrativo a RDS 
+  # Obtener tu IP actual: curl -4 ifconfig.me 
+  admin_cidr_blocks = ["38.252.93.102/32"]
 
   tags = merge(var.tags, {
     Name        = "foodoffice-rds-security-groups"
@@ -112,14 +115,18 @@ module "rds_security_groups" {
 }
 
 # Módulo de RDS PostgreSQL
-# Usando subredes privadas de datos para mayor seguridad
 module "rds" {
   source = "git::https://github.com/thiagoh20/terraform-modules.git//rds?ref=main"
 
   project_name         = var.project_name
   environment          = var.environment
   rds_security_group_id = module.rds_security_groups.rds_security_group_id
-  subnet_ids           = module.vpc.private_data_subnet_ids  # RDS en subredes privadas de datos
+  
+  # CAMBIO: RDS ahora vive en las subredes con acceso a internet
+  subnet_ids           = module.vpc.public_subnet_ids  
+
+  # CAMBIO: Obligatorio para recibir una IP pública de AWS
+  publicly_accessible  = true
 
   db_name     = var.db_name
   db_username = var.db_username
@@ -130,7 +137,6 @@ module "rds" {
   db_allocated_storage   = var.db_allocated_storage
   db_multi_az            = var.db_multi_az
   
-  # db.t3.micro sí soporta encriptación en reposo
   db_storage_encrypted   = true
 
   db_backup_retention_period = var.db_backup_retention_period
@@ -148,3 +154,8 @@ module "rds" {
   })
 }
 
+# --- OUTPUTS PARA CONEXIÓN ---
+output "rds_endpoint" {
+  description = "Copia este endpoint en DBeaver/pgAdmin"
+  value       = module.rds.db_instance_endpoint
+}
