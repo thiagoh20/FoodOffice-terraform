@@ -35,7 +35,13 @@ jobs:
           cache: 'npm'
 
       - name: Instalar dependencias
-        run: npm ci
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            echo "⚠️ package-lock.json no encontrado, usando npm install"
+            npm install
+          fi
 
       - name: Ejecutar lint
         run: npm run lint
@@ -65,7 +71,13 @@ jobs:
           cache: 'npm'
 
       - name: Instalar dependencias
-        run: npm ci
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            echo "⚠️ package-lock.json no encontrado, usando npm install"
+            npm install
+          fi
 
       - name: Ejecutar tests con Jest
         run: npm run test
