@@ -45,7 +45,7 @@
 :root {
   /* Paleta moderna y minimalista */
   --radius: 0.75rem; /* Bordes redondeados suaves */
-  --background:  /* Blanco suave */
+  --background: #f0f0f0; /* Blanco suave */
   --foreground: oklch(0.25 0.01 270); /* Gris oscuro con tinte azul */
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.25 0.01 270);

@@ -1,5 +1,78 @@
 # FoodOffice - Infraestructura y Frontend
 
+
+## 📦 Repositorios del Proyecto
+
+FoodOffice está compuesto por tres repositorios principales que trabajan en conjunto para formar la solución completa:
+
+### 1. [terraform-modules](https://github.com/thiagoh20/terraform-modules)
+
+**Propósito**: Módulos reutilizables de Terraform para infraestructura AWS.
+
+**Contenido**:
+- Módulos de Terraform reutilizables y versionados
+- Módulos disponibles:
+  - `vpc`: Red virtual privada con arquitectura de 3 capas (public, private-app, private-data)
+  - `s3`: Buckets S3 con configuraciones de seguridad
+  - `cloudfront`: Distribuciones CloudFront con Origin Access Control
+  - `rds`: Instancias RDS PostgreSQL con configuraciones de seguridad
+  - `security-groups`: Security Groups preconfigurados
+  - `iam-oidc`: Configuración de IAM OIDC para GitHub Actions
+- CI/CD con GitHub Actions (validación, análisis de seguridad con Checkov, versionado semántico)
+- Documentación completa de cada módulo con ejemplos de uso
+
+**Uso en este proyecto**: Los módulos se referencian desde este repositorio para crear la infraestructura base (VPC, RDS, S3, CloudFront, Security Groups).
+
+---
+
+### 2. [backend-foodoffice](https://github.com/thiagoh20/backend-foodoffice)
+
+**Propósito**: Backend API del sistema FoodOffice.
+
+**Contenido**:
+- API REST construida con Node.js, TypeScript, Express
+- Despliegue a AWS Lambda usando SAM (Serverless Application Model)
+- Integración con RDS PostgreSQL para persistencia de datos
+- Autenticación con JWT y OAuth
+- CI/CD con GitHub Actions para despliegue automático a Lambda
+- Configuración de VPC y Security Groups para acceso seguro a RDS
+
+**Funcionalidad**:
+- Endpoints para gestión de pedidos, productos, usuarios
+- Autenticación y autorización
+- Validación de datos y manejo de errores
+- CORS configurado para comunicación con el frontend
+
+**Uso en este proyecto**: El backend se despliega en Lambda dentro de la VPC creada por este repositorio, accediendo a la base de datos RDS configurada aquí.
+
+---
+
+### 3. [FoodOffice-terraform](https://github.com/thiagoh20/FoodOffice-terraform) (Este repositorio)
+
+**Propósito**: Frontend de la aplicación y configuración de infraestructura AWS.
+
+**Contenido**:
+- **Frontend**: Aplicación React con TypeScript, Vite y Tailwind CSS
+- **Infraestructura**: Configuración Terraform que utiliza los módulos de `terraform-modules`
+- **CI/CD**: Workflows de GitHub Actions para:
+  - Despliegue automático del frontend a S3 + CloudFront
+  - Gestión de infraestructura con Terraform
+  - Validaciones y análisis de costos
+- **Scripts**: Utilidades para gestión y limpieza de recursos AWS
+
+**Funcionalidad**:
+- Interfaz de usuario completa para gestión de pedidos
+- Comunicación con el backend mediante tRPC
+- Hosting estático en S3 con distribución global vía CloudFront
+- Gestión completa de la infraestructura AWS (VPC, RDS, S3, CloudFront, Security Groups)
+
+**Relación con otros repos**:
+- Utiliza módulos de `terraform-modules` para crear la infraestructura
+- El frontend se comunica con el backend desplegado desde `backend-foodoffice`
+- La infraestructura creada aquí (VPC, RDS, Security Groups) es utilizada por el backend
+
+---
+
 ## 📋 Descripción del Proyecto
 
 FoodOffice es una aplicación web completa para gestión de pedidos, construida con una arquitectura moderna que combina un frontend React con Vite y una infraestructura en AWS gestionada mediante Terraform.
