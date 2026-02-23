@@ -256,71 +256,31 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      # - name: Setup Terraform
-      #   uses: hashicorp/setup-terraform@v3
-      #   with:
-      #     terraform_version: 1.13.4
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.4
 
-      # - name: Configure Git credentials for private modules
-      #   run: |
-      #     git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
-
-      # - name: Terraform Init
-      #   working-directory: ./terraform
-      #   run: |
-      #     terraform init \
-      #       -backend-config="bucket=foodoffice-terraform-state" \
-      #       -backend-config="key=environments/dev/terraform.tfstate" \
-      #       -backend-config="region=us-east-2" \
-      #       -backend-config="dynamodb_table=terraform-state-lock" \
-      #       -backend-config="encrypt=true"
-
-      # - name: Importar recursos huérfanos al Terraform state
-      #   working-directory: ./
-      #   run: |
-      #     echo "🔍 Buscando e importando recursos huérfanos al Terraform state..."
-      #     chmod +x scripts/cleanup-orphaned-resources.sh
-      #     ./scripts/cleanup-orphaned-resources.sh
-      #   continue-on-error: true
-      #   env:
-      #     AWS_REGION: us-east-1
-      #     PROJECT_NAME: foodoffice
-      #     ENVIRONMENT: dev
-      #     TERRAFORM_DIR: terraform
-      #     BACKEND_BUCKET: foodoffice-terraform-state
-      #     BACKEND_KEY: environments/dev/terraform.tfstate
-      #     BACKEND_REGION: us-east-2
-      #     BACKEND_DYNAMODB: terraform-state-lock
-
-      # - name: Limpiar ENIs de Lambda antes de destroy
-      #   working-directory: ./
-      #   run: |
-      #     echo "🧹 Limpiando ENIs de Lambda antes de terraform destroy..."
-      #     chmod +x scripts/cleanup-lambda-enis.sh
-      #     ./scripts/cleanup-lambda-enis.sh
-      #   continue-on-error: true
-      #   env:
-      #     AWS_REGION: us-east-1
-
-      # - name: Terraform Destroy
-      #   working-directory: ./terraform
-      #   run: terraform destroy -auto-approve
-      #   env:
-      #     TF_VAR_environment: dev
-      #     TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
-      #     TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
-      #     TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
-      #     TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
-
-      - name: Limpiar estado de Terraform en S3
-        if: always()
-        working-directory: ./
+      - name: Configure Git credentials for private modules
         run: |
-          echo "🗑️ Limpiando estado de Terraform en S3 después del destroy..."
-          chmod +x scripts/cleanup-terraform-state.sh
-          ENVIRONMENT=dev \
-          BUCKET_NAME=foodoffice-terraform-state \
-          BACKEND_REGION=us-east-2 \
-          DYNAMODB_TABLE=terraform-state-lock \
-          ./scripts/cleanup-terraform-state.sh <<< "BORRAR" || echo "⚠️ Error al limpiar estado (puede que ya esté limpio)"
-        continue-on-error: true
+          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: |
+          terraform init \
+            -backend-config="bucket=foodoffice-terraform-state" \
+            -backend-config="key=environments/dev/terraform.tfstate" \
+            -backend-config="region=us-east-2" \
+            -backend-config="dynamodb_table=terraform-state-lock" \
+            -backend-config="encrypt=true"
+
+      - name: Terraform Destroy
+        working-directory: ./terraform
+        run: terraform destroy -auto-approve
+        env:
+          TF_VAR_environment: dev
+          TF_VAR_bucket_name: ${{ secrets.TF_VAR_BUCKET_NAME }}
+          TF_VAR_github_repository: ${{ secrets.TF_VAR_GITHUB_REPOSITORY }}
+          TF_VAR_oidc_provider_arn: ${{ secrets.TF_VAR_OIDC_PROVIDER_ARN }}
+          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
